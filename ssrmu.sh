@@ -72,7 +72,7 @@ BBR_installation_status(){
 	if [[ ! -e ${BBR_file} ]]; then
 		echo -e "${Error} 没有发现 BBR脚本，开始下载..."
 		cd "${file}"
-		if ! wget -N --no-check-certificate https://raw.githubusercontent.com/ToyoDAdoubi/doubi/master/bbr.sh; then
+		if ! wget -N --no-check-certificate https://raw.githubusercontent.com/woniuizfb/doubi/master/bbr.sh; then
 			echo -e "${Error} BBR 脚本下载失败 !" && exit 1
 		else
 			echo -e "${Info} BBR 脚本下载完成 !"
@@ -147,6 +147,7 @@ Get_User_info(){
 	protocol_param=$(echo "${user_info_get}"|grep -w "protocol_param :"|sed 's/[[:space:]]//g'|awk -F ":" '{print $NF}')
 	[[ -z ${protocol_param} ]] && protocol_param="0(无限)"
 	obfs=$(echo "${user_info_get}"|grep -w "obfs :"|sed 's/[[:space:]]//g'|awk -F ":" '{print $NF}')
+	obfs_param=$(echo "${user_info_get}"|grep -w "obfs_param :"|sed 's/[[:space:]]//g'|awk -F ":" '{print $NF}')
 	#transfer_enable=$(echo "${user_info_get}"|grep -w "transfer_enable :"|sed 's/[[:space:]]//g'|awk -F ":" '{print $NF}'|awk -F "ytes" '{print $1}'|sed 's/KB/ KB/;s/MB/ MB/;s/GB/ GB/;s/TB/ TB/;s/PB/ PB/')
 	#u=$(echo "${user_info_get}"|grep -w "u :"|sed 's/[[:space:]]//g'|awk -F ":" '{print $NF}')
 	#d=$(echo "${user_info_get}"|grep -w "d :"|sed 's/[[:space:]]//g'|awk -F ":" '{print $NF}')
@@ -275,22 +276,24 @@ Get_User_transfer_all(){
 	fi
 }
 urlsafe_base64(){
-	date=$(echo -n "$1"|base64|sed ':a;N;s/\n/ /g;ta'|sed 's/ //g;s/=//g;s/+/-/g;s/\//_/g')
-	echo -e "${date}"
+	data=$(echo -n "$1"|base64|sed ':a;N;s/\n/ /g;ta'|sed 's/ //g;s/=//g;s/+/-/g;s/\//_/g')
+	echo -e "${data}"
 }
 ss_link_qr(){
 	SSbase64=$(urlsafe_base64 "${method}:${password}@${ip}:${port}")
 	SSurl="ss://${SSbase64}"
-	SSQRcode="http://doub.pw/qr/qr.php?text=${SSurl}"
+	SSQRcode="http://qr.epub.fun/?url=${SSurl}"
 	ss_link=" SS    链接 : ${Green_font_prefix}${SSurl}${Font_color_suffix} \n SS  二维码 : ${Green_font_prefix}${SSQRcode}${Font_color_suffix}"
 }
 ssr_link_qr(){
 	SSRprotocol=$(echo ${protocol} | sed 's/_compatible//g')
 	SSRobfs=$(echo ${obfs} | sed 's/_compatible//g')
 	SSRPWDbase64=$(urlsafe_base64 "${password}")
-	SSRbase64=$(urlsafe_base64 "${ip}:${port}:${SSRprotocol}:${method}:${SSRobfs}:${SSRPWDbase64}")
+	SSRobfsparambase64=$(urlsafe_base64 "${obfsparam}")
+	SSRprotoparambase64=$(urlsafe_base64 "${protoparam}")
+	SSRbase64=$(urlsafe_base64 "${ip}:${port}:${SSRprotocol}:${method}:${SSRobfs}:${SSRPWDbase64}/?obfsparam=${SSRobfsparambase64}&protoparam=${SSRprotoparambase64}")
 	SSRurl="ssr://${SSRbase64}"
-	SSRQRcode="http://doub.pw/qr/qr.php?text=${SSRurl}"
+	SSRQRcode="http://qr.epub.fun/?url=${SSRurl}"
 	ssr_link=" SSR   链接 : ${Red_font_prefix}${SSRurl}${Font_color_suffix} \n SSR 二维码 : ${Red_font_prefix}${SSRQRcode}${Font_color_suffix} \n "
 }
 ss_ssr_determine(){
@@ -355,6 +358,7 @@ View_User_info(){
 	echo -e " 加密\t    : ${Green_font_prefix}${method}${Font_color_suffix}"
 	echo -e " 协议\t    : ${Red_font_prefix}${protocol}${Font_color_suffix}"
 	echo -e " 混淆\t    : ${Red_font_prefix}${obfs}${Font_color_suffix}"
+	echo -e " 混淆的参数 : ${Green_font_prefix}${obfs_param}${Font_color_suffix}"
 	echo -e " 设备数限制 : ${Green_font_prefix}${protocol_param}${Font_color_suffix}"
 	echo -e " 单线程限速 : ${Green_font_prefix}${speed_limit_per_con} KB/S${Font_color_suffix}"
 	echo -e " 用户总限速 : ${Green_font_prefix}${speed_limit_per_user} KB/S${Font_color_suffix}"
@@ -366,8 +370,7 @@ View_User_info(){
 	echo -e "${ss_link}"
 	echo -e "${ssr_link}"
 	echo -e " ${Green_font_prefix} 提示: ${Font_color_suffix}
- 在浏览器中，打开二维码链接，就可以看到二维码图片。
- 协议和混淆后面的[ _compatible ]，指的是 兼容原版协议/混淆。"
+ 在浏览器中，打开二维码链接，就可以看到二维码图片。"
 	echo && echo "==================================================="
 }
 # 设置 配置信息
@@ -499,11 +502,31 @@ Set_config_protocol(){
 	if [[ ${ssr_protocol} != "origin" ]]; then
 		if [[ ${ssr_protocol} == "auth_sha1_v4" ]]; then
 			read -e -p "是否设置 协议插件兼容原版(_compatible)？[Y/n]" ssr_protocol_yn
-			[[ -z "${ssr_protocol_yn}" ]] && ssr_protocol_yn="y"
+			[[ -z "${ssr_protocol_yn}" ]] && ssr_protocol_yn="n"
 			[[ $ssr_protocol_yn == [Yy] ]] && ssr_protocol=${ssr_protocol}"_compatible"
 			echo
 		fi
 	fi
+}
+Set_config_protocol_param(){
+	while true
+	do
+	echo -e "请输入要设置的用户 欲限制的设备数 (${Green_font_prefix} auth_* 系列协议 不兼容原版才有效 ${Font_color_suffix})"
+	echo -e "${Tip} 设备数限制：每个端口同一时间能链接的客户端数量(多端口模式，每个端口都是独立计算)，建议最少 2个。"
+	read -e -p "(默认: 无限):" ssr_protocol_param
+	[[ -z "$ssr_protocol_param" ]] && ssr_protocol_param="" && echo && break
+	echo $((${ssr_protocol_param}+0)) &>/dev/null
+	if [[ $? == 0 ]]; then
+		if [[ ${ssr_protocol_param} -ge 1 ]] && [[ ${ssr_protocol_param} -le 9999 ]]; then
+			echo && echo ${Separator_1} && echo -e "	设备数限制 : ${Green_font_prefix}${ssr_protocol_param}${Font_color_suffix}" && echo ${Separator_1} && echo
+			break
+		else
+			echo -e "${Error} 请输入正确的数字(1-9999)"
+		fi
+	else
+		echo -e "${Error} 请输入正确的数字(1-9999)"
+	fi
+	done
 }
 Set_config_obfs(){
 	echo -e "请选择要设置的用户 混淆插件
@@ -539,25 +562,11 @@ Set_config_obfs(){
 			echo
 	fi
 }
-Set_config_protocol_param(){
-	while true
-	do
-	echo -e "请输入要设置的用户 欲限制的设备数 (${Green_font_prefix} auth_* 系列协议 不兼容原版才有效 ${Font_color_suffix})"
-	echo -e "${Tip} 设备数限制：每个端口同一时间能链接的客户端数量(多端口模式，每个端口都是独立计算)，建议最少 2个。"
-	read -e -p "(默认: 无限):" ssr_protocol_param
-	[[ -z "$ssr_protocol_param" ]] && ssr_protocol_param="" && echo && break
-	echo $((${ssr_protocol_param}+0)) &>/dev/null
-	if [[ $? == 0 ]]; then
-		if [[ ${ssr_protocol_param} -ge 1 ]] && [[ ${ssr_protocol_param} -le 9999 ]]; then
-			echo && echo ${Separator_1} && echo -e "	设备数限制 : ${Green_font_prefix}${ssr_protocol_param}${Font_color_suffix}" && echo ${Separator_1} && echo
-			break
-		else
-			echo -e "${Error} 请输入正确的数字(1-9999)"
-		fi
-	else
-		echo -e "${Error} 请输入正确的数字(1-9999)"
-	fi
-	done
+Set_config_obfs_param(){
+	echo -e "请输入要设置的混淆参数 (${Green_font_prefix} 伪装 ${Font_color_suffix})"
+	read -e -p "(默认: 随机):" ssr_obfs_param
+	[[ -z "$ssr_obfs_param" ]] && ssr_obfs_param=$(echo a$(od -An -N2 -i /dev/random) | sed 's/ //g')."wns.windows.com"
+	echo ${Separator_1} && echo -e "	混淆参数 : ${Green_font_prefix}${ssr_obfs_param}${Font_color_suffix}" && echo ${Separator_1}
 }
 Set_config_speed_limit_per_con(){
 	while true
@@ -709,6 +718,7 @@ Set_config_all(){
 		Set_config_method
 		Set_config_protocol
 		Set_config_obfs
+		Set_config_obfs_param
 		Set_config_protocol_param
 		Set_config_speed_limit_per_con
 		Set_config_speed_limit_per_user
@@ -721,6 +731,7 @@ Set_config_all(){
 		Set_config_method
 		Set_config_protocol
 		Set_config_obfs
+		Set_config_obfs_param
 		Set_config_protocol_param
 		Set_config_speed_limit_per_con
 		Set_config_speed_limit_per_user
@@ -753,6 +764,14 @@ Modify_config_protocol(){
 		echo -e "${Info} 用户协议修改成功 ${Green_font_prefix}[端口: ${ssr_port}]${Font_color_suffix} (注意：可能需要十秒左右才会应用最新配置)"
 	fi
 }
+Modify_config_protocol_param(){
+	match_edit=$(python mujson_mgr.py -e -p "${ssr_port}" -G "${ssr_protocol_param}"|grep -w "edit user ")
+	if [[ -z "${match_edit}" ]]; then
+		echo -e "${Error} 用户协议参数(设备数限制)修改失败 ${Green_font_prefix}[端口: ${ssr_port}]${Font_color_suffix} " && exit 1
+	else
+		echo -e "${Info} 用户议参数(设备数限制)修改成功 ${Green_font_prefix}[端口: ${ssr_port}]${Font_color_suffix} (注意：可能需要十秒左右才会应用最新配置)"
+	fi
+}
 Modify_config_obfs(){
 	match_edit=$(python mujson_mgr.py -e -p "${ssr_port}" -o "${ssr_obfs}"|grep -w "edit user ")
 	if [[ -z "${match_edit}" ]]; then
@@ -761,12 +780,12 @@ Modify_config_obfs(){
 		echo -e "${Info} 用户混淆修改成功 ${Green_font_prefix}[端口: ${ssr_port}]${Font_color_suffix} (注意：可能需要十秒左右才会应用最新配置)"
 	fi
 }
-Modify_config_protocol_param(){
-	match_edit=$(python mujson_mgr.py -e -p "${ssr_port}" -G "${ssr_protocol_param}"|grep -w "edit user ")
+Modify_config_obfs_param(){
+	match_edit=$(python mujson_mgr.py -e -p "${ssr_port}" -g "${ssr_obfs_param}"|grep -w "edit user ")
 	if [[ -z "${match_edit}" ]]; then
-		echo -e "${Error} 用户协议参数(设备数限制)修改失败 ${Green_font_prefix}[端口: ${ssr_port}]${Font_color_suffix} " && exit 1
+		echo -e "${Error} 用户混淆参数修改失败 ${Green_font_prefix}[端口: ${ssr_port}]${Font_color_suffix} " && exit 1
 	else
-		echo -e "${Info} 用户议参数(设备数限制)修改成功 ${Green_font_prefix}[端口: ${ssr_port}]${Font_color_suffix} (注意：可能需要十秒左右才会应用最新配置)"
+		echo -e "${Info} 用户混淆参数修改成功 ${Green_font_prefix}[端口: ${ssr_port}]${Font_color_suffix} (注意：可能需要十秒左右才会应用最新配置)"
 	fi
 }
 Modify_config_speed_limit_per_con(){
@@ -815,6 +834,7 @@ Modify_config_all(){
 	Modify_config_method
 	Modify_config_protocol
 	Modify_config_obfs
+	Modify_config_obfs_param
 	Modify_config_protocol_param
 	Modify_config_speed_limit_per_con
 	Modify_config_speed_limit_per_user
@@ -853,9 +873,9 @@ Debian_apt(){
 # 下载 ShadowsocksR
 Download_SSR(){
 	cd "/usr/local"
-	wget -N --no-check-certificate "https://github.com/ToyoDAdoubiBackup/shadowsocksr/archive/manyuser.zip"
+	wget -N --no-check-certificate "https://github.com/woniuzfb/shadowsocksr/archive/manyuser.zip"
 	#git config --global http.sslVerify false
-	#env GIT_SSL_NO_VERIFY=true git clone -b manyuser https://github.com/ToyoDAdoubiBackup/shadowsocksr.git
+	#env GIT_SSL_NO_VERIFY=true git clone -b manyuser https://github.com/woniuzfb/shadowsocksr.git
 	#[[ ! -e ${ssr_folder} ]] && echo -e "${Error} ShadowsocksR服务端 下载失败 !" && exit 1
 	[[ ! -e "manyuser.zip" ]] && echo -e "${Error} ShadowsocksR服务端 压缩包 下载失败 !" && rm -rf manyuser.zip && exit 1
 	unzip "manyuser.zip"
@@ -877,14 +897,14 @@ Download_SSR(){
 }
 Service_SSR(){
 	if [[ ${release} = "centos" ]]; then
-		if ! wget --no-check-certificate https://raw.githubusercontent.com/ToyoDAdoubi/doubi/master/service/ssrmu_centos -O /etc/init.d/ssrmu; then
+		if ! wget --no-check-certificate https://raw.githubusercontent.com/woniuzfb/doubi/master/service/ssrmu_centos -O /etc/init.d/ssrmu; then
 			echo -e "${Error} ShadowsocksR服务 管理脚本下载失败 !" && exit 1
 		fi
 		chmod +x /etc/init.d/ssrmu
 		chkconfig --add ssrmu
 		chkconfig ssrmu on
 	else
-		if ! wget --no-check-certificate https://raw.githubusercontent.com/ToyoDAdoubi/doubi/master/service/ssrmu_debian -O /etc/init.d/ssrmu; then
+		if ! wget --no-check-certificate https://raw.githubusercontent.com/woniuzfb/doubi/master/service/ssrmu_debian -O /etc/init.d/ssrmu; then
 			echo -e "${Error} ShadowsocksR服务 管理脚本下载失败 !" && exit 1
 		fi
 		chmod +x /etc/init.d/ssrmu
@@ -1168,14 +1188,15 @@ Modify_Config(){
  ${Green_font_prefix}4.${Font_color_suffix}  修改 加密方式
  ${Green_font_prefix}5.${Font_color_suffix}  修改 协议插件
  ${Green_font_prefix}6.${Font_color_suffix}  修改 混淆插件
- ${Green_font_prefix}7.${Font_color_suffix}  修改 设备数限制
- ${Green_font_prefix}8.${Font_color_suffix}  修改 单线程限速
- ${Green_font_prefix}9.${Font_color_suffix}  修改 用户总限速
- ${Green_font_prefix}10.${Font_color_suffix} 修改 用户总流量
- ${Green_font_prefix}11.${Font_color_suffix} 修改 用户禁用端口
- ${Green_font_prefix}12.${Font_color_suffix} 修改 全部配置
+ ${Green_font_prefix}7.${Font_color_suffix}  修改 混淆参数
+ ${Green_font_prefix}8.${Font_color_suffix}  修改 设备数限制
+ ${Green_font_prefix}9.${Font_color_suffix}  修改 单线程限速
+ ${Green_font_prefix}10.${Font_color_suffix}  修改 用户总限速
+ ${Green_font_prefix}11.${Font_color_suffix} 修改 用户总流量
+ ${Green_font_prefix}12.${Font_color_suffix} 修改 用户禁用端口
+ ${Green_font_prefix}13.${Font_color_suffix} 修改 全部配置
 ————— 其他 —————
- ${Green_font_prefix}13.${Font_color_suffix} 修改 用户配置中显示的IP或域名
+ ${Green_font_prefix}14.${Font_color_suffix} 修改 用户配置中显示的IP或域名
  
  ${Tip} 用户的用户名和端口是无法修改，如果需要修改请使用脚本的 手动修改功能 !" && echo
 	read -e -p "(默认: 取消):" ssr_modify
@@ -1202,33 +1223,37 @@ Modify_Config(){
 		Modify_config_obfs
 	elif [[ ${ssr_modify} == "7" ]]; then
 		Modify_port
+		Set_config_obfs_param
+		Modify_config_obfs_param
+	elif [[ ${ssr_modify} == "8" ]]; then
+		Modify_port
 		Set_config_protocol_param
 		Modify_config_protocol_param
-	elif [[ ${ssr_modify} == "8" ]]; then
+	elif [[ ${ssr_modify} == "9" ]]; then
 		Modify_port
 		Set_config_speed_limit_per_con
 		Modify_config_speed_limit_per_con
-	elif [[ ${ssr_modify} == "9" ]]; then
+	elif [[ ${ssr_modify} == "10" ]]; then
 		Modify_port
 		Set_config_speed_limit_per_user
 		Modify_config_speed_limit_per_user
-	elif [[ ${ssr_modify} == "10" ]]; then
+	elif [[ ${ssr_modify} == "11" ]]; then
 		Modify_port
 		Set_config_transfer
 		Modify_config_transfer
-	elif [[ ${ssr_modify} == "11" ]]; then
+	elif [[ ${ssr_modify} == "12" ]]; then
 		Modify_port
 		Set_config_forbid
 		Modify_config_forbid
-	elif [[ ${ssr_modify} == "12" ]]; then
+	elif [[ ${ssr_modify} == "13" ]]; then
 		Modify_port
 		Set_config_all "Modify"
 		Modify_config_all
-	elif [[ ${ssr_modify} == "13" ]]; then
+	elif [[ ${ssr_modify} == "14" ]]; then
 		Set_user_api_server_pub_addr "Modify"
 		Modify_user_api_server_pub_addr
 	else
-		echo -e "${Error} 请输入正确的数字(1-13)" && exit 1
+		echo -e "${Error} 请输入正确的数字(1-14)" && exit 1
 	fi
 }
 List_port_user(){
@@ -1252,7 +1277,7 @@ List_port_user(){
 Add_port_user(){
 	lalal=$1
 	if [[ "$lalal" == "install" ]]; then
-		match_add=$(python mujson_mgr.py -a -u "${ssr_user}" -p "${ssr_port}" -k "${ssr_password}" -m "${ssr_method}" -O "${ssr_protocol}" -G "${ssr_protocol_param}" -o "${ssr_obfs}" -s "${ssr_speed_limit_per_con}" -S "${ssr_speed_limit_per_user}" -t "${ssr_transfer}" -f "${ssr_forbid}"|grep -w "add user info")
+		match_add=$(python mujson_mgr.py -a -u "${ssr_user}" -p "${ssr_port}" -k "${ssr_password}" -m "${ssr_method}" -O "${ssr_protocol}" -G "${ssr_protocol_param}" -o "${ssr_obfs}" -g "${ssr_obfs_param}" -s "${ssr_speed_limit_per_con}" -S "${ssr_speed_limit_per_user}" -t "${ssr_transfer}" -f "${ssr_forbid}"|grep -w "add user info")
 	else
 		while true
 		do
@@ -1261,7 +1286,7 @@ Add_port_user(){
 			[[ ! -z "${match_port}" ]] && echo -e "${Error} 该端口 [${ssr_port}] 已存在，请勿重复添加 !" && exit 1
 			match_username=$(python mujson_mgr.py -l|grep -w "user \[${ssr_user}]")
 			[[ ! -z "${match_username}" ]] && echo -e "${Error} 该用户名 [${ssr_user}] 已存在，请勿重复添加 !" && exit 1
-			match_add=$(python mujson_mgr.py -a -u "${ssr_user}" -p "${ssr_port}" -k "${ssr_password}" -m "${ssr_method}" -O "${ssr_protocol}" -G "${ssr_protocol_param}" -o "${ssr_obfs}" -s "${ssr_speed_limit_per_con}" -S "${ssr_speed_limit_per_user}" -t "${ssr_transfer}" -f "${ssr_forbid}"|grep -w "add user info")
+			match_add=$(python mujson_mgr.py -a -u "${ssr_user}" -p "${ssr_port}" -k "${ssr_password}" -m "${ssr_method}" -O "${ssr_protocol}" -G "${ssr_protocol_param}" -o "${ssr_obfs}" -g "${ssr_obfs_param}" -s "${ssr_speed_limit_per_con}" -S "${ssr_speed_limit_per_user}" -t "${ssr_transfer}" -f "${ssr_forbid}"|grep -w "add user info")
 			if [[ -z "${match_add}" ]]; then
 				echo -e "${Error} 用户添加失败 ${Green_font_prefix}[用户名: ${ssr_user} , 端口: ${ssr_port}]${Font_color_suffix} "
 				break
@@ -1663,12 +1688,12 @@ Other_functions(){
 }
 # 封禁 BT PT SPAM
 BanBTPTSPAM(){
-	wget -N --no-check-certificate https://raw.githubusercontent.com/ToyoDAdoubi/doubi/master/ban_iptables.sh && chmod +x ban_iptables.sh && bash ban_iptables.sh banall
+	wget -N --no-check-certificate https://raw.githubusercontent.com/woniuzfb/doubi/master/ban_iptables.sh && chmod +x ban_iptables.sh && bash ban_iptables.sh banall
 	rm -rf ban_iptables.sh
 }
 # 解封 BT PT SPAM
 UnBanBTPTSPAM(){
-	wget -N --no-check-certificate https://raw.githubusercontent.com/ToyoDAdoubi/doubi/master/ban_iptables.sh && chmod +x ban_iptables.sh && bash ban_iptables.sh unbanall
+	wget -N --no-check-certificate https://raw.githubusercontent.com/woniuzfb/doubi/master/ban_iptables.sh && chmod +x ban_iptables.sh && bash ban_iptables.sh unbanall
 	rm -rf ban_iptables.sh
 }
 Set_config_connect_verbose_info(){
@@ -1769,14 +1794,14 @@ crontab_monitor_ssr_cron_stop(){
 	fi
 }
 Update_Shell(){
-	sh_new_ver=$(wget --no-check-certificate -qO- -t1 -T3 "https://raw.githubusercontent.com/ToyoDAdoubi/doubi/master/ssrmu.sh"|grep 'sh_ver="'|awk -F "=" '{print $NF}'|sed 's/\"//g'|head -1) && sh_new_type="github"
+	sh_new_ver=$(wget --no-check-certificate -qO- -t1 -T3 "https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrmu.sh"|grep 'sh_ver="'|awk -F "=" '{print $NF}'|sed 's/\"//g'|head -1) && sh_new_type="github"
 	[[ -z ${sh_new_ver} ]] && echo -e "${Error} 无法链接到 Github !" && exit 0
 	if [[ -e "/etc/init.d/ssrmu" ]]; then
 		rm -rf /etc/init.d/ssrmu
 		Service_SSR
 	fi
 	cd "${file}"
-	wget -N --no-check-certificate "https://raw.githubusercontent.com/ToyoDAdoubi/doubi/master/ssrmu.sh" && chmod +x ssrmu.sh
+	wget -N --no-check-certificate "https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrmu.sh" && chmod +x ssrmu.sh
 	echo -e "脚本已更新为最新版本[ ${sh_new_ver} ] !(注意：因为更新方式为直接覆盖当前运行的脚本，所以可能下面会提示一些报错，无视即可)" && exit 0
 }
 # 显示 菜单状态
