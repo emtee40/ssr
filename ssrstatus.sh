@@ -13,7 +13,7 @@ sh_ver="1.0.5"
 Timeout="10"
 Test_URL="https://www.bing.com"
 Web_file="/usr/local/SSRStatus"
-SSR_folder="/root/shadowsocksr/shadowsocks"
+SSR_folder="/usr/local/shadowsocksr/shadowsocks"
 filepath=$(cd "$(dirname "$0")"; pwd)
 file=$(echo -e "${filepath}"|awk -F "$0" '{print $1}')
 log_file="${file}/ssr_status.log"
@@ -45,6 +45,18 @@ check_sys(){
 check_installed_server_status(){
 	[[ ! -e "${Web_file}" ]] && echo -e "${Error} SSRStatus Web网页文件没有安装，请检查 !" && exit 1
 }
+Get_IP(){
+	server_s=$(wget -qO- -t1 -T2 ipinfo.io/ip)
+	if [[ -z "${server_s}" ]]; then
+		server_s=$(wget -qO- -t1 -T2 api.ip.sb/ip)
+		if [[ -z "${server_s}" ]]; then
+			server_s=$(wget -qO- -t1 -T2 members.3322.org/dyndns/getip)
+			if [[ -z "${server_s}" ]]; then
+				server_s="VPS_IP"
+			fi
+		fi
+	fi
+}
 set_config_ip(){
 	echo "请输入 ShadowsocksR 账号服务器公网IP"
 	read -e -p "(默认取消):" ip
@@ -55,8 +67,8 @@ set_config_port(){
 	while true
 	do
 	echo -e "请输入 ShadowsocksR 账号端口"
-	read -e -p "(默认: 2333):" port
-	[[ -z "$port" ]] && port="2333"
+	read -e -p "(默认: 543):" port
+	[[ -z "$port" ]] && port="543"
 	echo $((${port}+0)) &>/dev/null
 	if [[ $? -eq 0 ]]; then
 		if [[ ${port} -ge 1 ]] && [[ ${port} -le 65535 ]]; then
@@ -71,9 +83,9 @@ set_config_port(){
 	done
 }
 set_config_password(){
-	echo "请输入 ShadowsocksR 账号密码"
-	read -e -p "(默认: doub.io):" passwd
-	[[ -z "${passwd}" ]] && passwd="doub.io"
+	echo "请输入 ShadowsocksR 账号的密码"
+	read -e -p "(默认: fuckyougfw):" passwd
+	[[ -z "${passwd}" ]] && passwd="fuckyougfw"
 	echo && echo -e "	密码 : ${Red_font_prefix}${passwd}${Font_color_suffix}" && echo
 }
 set_config_method(){
@@ -100,8 +112,8 @@ set_config_method(){
  ${Green_font_prefix}15.${Font_color_suffix} chacha20
  ${Green_font_prefix}16.${Font_color_suffix} chacha20-ietf
  ${Tip} salsa20/chacha20-*系列加密方式，需要额外安装依赖 libsodium ，否则会无法启动ShadowsocksR !" && echo
-	read -e -p "(默认: 5. aes-128-ctr):" method
-	[[ -z "${method}" ]] && method="5"
+	read -e -p "(默认: 10. aes-256-cfb):" method
+	[[ -z "${method}" ]] && method="10"
 	if [[ ${method} == "1" ]]; then
 		method="none"
 	elif [[ ${method} == "2" ]]; then
@@ -135,7 +147,7 @@ set_config_method(){
 	elif [[ ${method} == "16" ]]; then
 		method="chacha20-ietf"
 	else
-		method="aes-128-ctr"
+		method="aes-256-cfb"
 	fi
 	echo && echo ${Separator_1} && echo -e "	加密 : ${Red_font_prefix}${method}${Font_color_suffix}" && echo ${Separator_1} && echo
 }
@@ -146,8 +158,8 @@ set_config_protocol(){
  ${Green_font_prefix}3.${Font_color_suffix} auth_aes128_md5
  ${Green_font_prefix}4.${Font_color_suffix} auth_aes128_sha1
  ${Green_font_prefix}5.${Font_color_suffix} auth_chain_a" && echo
-	read -e -p "(默认: 2. auth_sha1_v4):" protocol
-	[[ -z "${protocol}" ]] && protocol="2"
+	read -e -p "(默认: 4. auth_aes128_sha1):" protocol
+	[[ -z "${protocol}" ]] && protocol="4"
 	if [[ ${protocol} == "1" ]]; then
 		protocol="origin"
 	elif [[ ${protocol} == "2" ]]; then
@@ -159,7 +171,7 @@ set_config_protocol(){
 	elif [[ ${protocol} == "5" ]]; then
 		protocol="auth_chain_a"
 	else
-		protocol="auth_sha1_v4"
+		protocol="auth_aes128_sha1"
 	fi
 	echo && echo -e "	协议 : ${Red_font_prefix}${protocol}${Font_color_suffix}" && echo
 }
@@ -232,7 +244,7 @@ Set_server(){
 	echo -e "请输入 SSRStatus 网站要设置的 域名[server]
 默认为本机IP为域名，例如输入: toyoo.ml，如果要使用本机IP，请留空直接回车"
 	read -e -p "(默认: 本机IP):" server_s
-	[[ -z "$server_s" ]] && server_s=""
+	[[ -z "$server_s" ]] && Get_IP
 	
 	echo && echo -e "	IP/域名[server]: ${Red_background_prefix} ${server_s} ${Font_color_suffix}" && echo
 }
@@ -715,7 +727,7 @@ Install_caddy(){
 		Set_server
 		Set_server_port
 		if [[ ! -e "/usr/local/caddy/caddy" ]]; then
-			wget -N --no-check-certificate https://raw.githubusercontent.com/ToyoDAdoubi/doubi/master/caddy_install.sh
+			wget -N --no-check-certificate https://raw.githubusercontent.com/woniuzfb/doubi/master/caddy_install.sh
 			chmod +x caddy_install.sh
 			bash caddy_install.sh install
 			[[ ! -e "/usr/local/caddy/caddy" ]] && echo -e "${Error} Caddy安装失败，请手动部署，Web网页文件位置：${Web_file}" && exit 0
@@ -809,9 +821,9 @@ Del_Crontab(){
 	fi
 }
 Update_Shell(){
-	sh_new_ver=$(wget --no-check-certificate -qO- -t1 -T3 "https://raw.githubusercontent.com/ToyoDAdoubi/doubi/master/ssrstatus.sh"|grep 'sh_ver="'|awk -F "=" '{print $NF}'|sed 's/\"//g'|head -1) && sh_new_type="github"
+	sh_new_ver=$(wget --no-check-certificate -qO- -t1 -T3 "https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrstatus.sh"|grep 'sh_ver="'|awk -F "=" '{print $NF}'|sed 's/\"//g'|head -1) && sh_new_type="github"
 	[[ -z ${sh_new_ver} ]] && echo -e "${Error} 无法链接到 Github !" && exit 0
-	wget -N --no-check-certificate "https://raw.githubusercontent.com/ToyoDAdoubi/doubi/master/ssrstatus.sh" && chmod +x ssrstatus.sh
+	wget -N --no-check-certificate "https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrstatus.sh" && chmod +x ssrstatus.sh
 	echo -e "脚本已更新为最新版本[ ${sh_new_ver} ] !(注意：因为更新方式为直接覆盖当前运行的脚本，所以可能下面会提示一些报错，无视即可)" && exit 0
 }
 menu(){
