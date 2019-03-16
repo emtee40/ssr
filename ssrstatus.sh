@@ -66,9 +66,9 @@ set_config_ip(){
 set_config_port(){
 	while true
 	do
-	echo -e "请输入 ShadowsocksR 账号端口"
-	read -e -p "(默认: 543):" port
-	[[ -z "$port" ]] && port="543"
+	echo "请输入 ShadowsocksR 账号端口"
+	read -e -p "(默认: 28989):" port
+	[[ -z "$port" ]] && port="28989"
 	echo $((${port}+0)) &>/dev/null
 	if [[ $? -eq 0 ]]; then
 		if [[ ${port} -ge 1 ]] && [[ ${port} -le 65535 ]]; then
@@ -212,7 +212,7 @@ set_config_user(){
 	read -e -p "(默认:2):" enter_type
 	[[ -z "${enter_type}" ]] && enter_type="2"
 	if [[ ${enter_type} == "1" ]]; then
-		echo -e "下面依次开始输入要检测可用性的 ShadowsocksR账号信息。" && echo
+		echo "下面依次开始输入要检测可用性的 ShadowsocksR账号信息。" && echo
 		set_config_ip
 		set_config_port
 		set_config_password
@@ -241,7 +241,7 @@ set_config_location(){
 	echo && echo -e "	位置 : ${Red_font_prefix}${Config_Location}${Font_color_suffix}" && echo
 }
 Set_server(){
-	echo -e "请输入 SSRStatus 网站要设置的 域名[server]
+	echo "请输入 SSRStatus 网站要设置的 域名[server]
 默认为本机IP为域名，例如输入: toyoo.ml，如果要使用本机IP，请留空直接回车"
 	read -e -p "(默认: 本机IP):" server_s
 	[[ -z "$server_s" ]] && Get_IP
@@ -251,7 +251,7 @@ Set_server(){
 Set_server_port(){
 	while true
 		do
-		echo -e "请输入 SSRStatus 网站要设置的 域名/IP的端口[1-65535]（如果是域名的话，一般建议用 http 80 端口）"
+		echo "请输入 SSRStatus 网站要设置的 域名/IP的端口[1-65535]（如果是域名的话，一般建议用 http 80 端口）"
 		read -e -p "(默认: 8888):" server_port_s
 		[[ -z "$server_port_s" ]] && server_port_s="8888"
 		echo $((${server_port_s}+0)) &>/dev/null
@@ -345,10 +345,10 @@ Get_Like(){
 }
 Analysis_Config(){
 	Config=$(echo -e "${Like}"|sed -n "$1"p)
-	Config_info_base64=$(echo -e "${Config}"|awk -F '###' '{print $1}')
-	Config_Name=$(echo -e "${Config}"|awk -F '###' '{print $2}')
-	Config_Location=$(echo -e "${Config}"|awk -F '###' '{print $3}')
-	Config_Disabled=$(echo -e "${Config}"|awk -F '###' '{print $4}')
+	Config_info_base64=$(echo "${Config}"|awk -F '###' '{print $1}')
+	Config_Name=$(echo "${Config}"|awk -F '###' '{print $2}')
+	Config_Location=$(echo "${Config}"|awk -F '###' '{print $3}')
+	Config_Disabled=$(echo "${Config}"|awk -F '###' '{print $4}')
 	if [[ ${Config_Disabled} == "true" ]]; then
 		echo -e "${Info} 账号已禁用，跳过检测 [${Config_info_base64}] !" | tee -a ${log_file}
 		echo "---------------------------------------------------------"
@@ -527,7 +527,7 @@ Test_one(){
 	local_port=$(rand)
 	while true
 	do
-	echo -e "请选择你要单独测试的账号序号"
+	echo "请选择你要单独测试的账号序号"
 	read -e -p "(默认取消):" Test_one_num
 	[[ -z "${Test_one_num}" ]] && echo "已取消..." && exit 1
 	echo $((${Test_one_num}+0)) &>/dev/null
@@ -605,7 +605,7 @@ Del_SSRStatus(){
 	[[ ${Like_num} == 1 ]] && echo -e "${Error} 当前仅剩一个账号配置，无法删除 !" && exit 0
 	while true
 	do
-	echo -e "请选择你要删除的账号序号"
+	echo "请选择你要删除的账号序号"
 	read -e -p "(默认取消):" Del_num
 	[[ -z "${Del_num}" ]] && echo "已取消..." && exit 1
 	echo $((${Del_num}+0)) &>/dev/null
@@ -630,12 +630,13 @@ Modify_SSRStatus(){
 	List_SSRStatus
 	while true
 	do
-	echo -e "请选择你要修改的账号序号"
+	echo "请选择你要修改的账号序号"
 	read -e -p "(默认取消):" Modify_num
 	[[ -z "${Modify_num}" ]] && echo "已取消..." && exit 1
 	echo $((${Modify_num}+0)) &>/dev/null
 	if [[ $? -eq 0 ]]; then
 		if [[ ${Modify_num} -ge 1 ]] && [[ ${Modify_num} -le ${Like_num} ]]; then
+			Config_old=$(echo -e "${Like}"|sed -n "${Modify_num}"p)
 			set_config_user
 			if [[ $? == 1 ]]; then
 				if [[ ${protocol} == "origin" ]] && [[ ${obfs} == "plain" ]]; then
@@ -649,9 +650,8 @@ Modify_SSRStatus(){
 			fi
 			set_config_name
 			set_config_location
-			Like="${Like}###${Config_Name}###${Config_Location}###false"
-			sed -i "${Modify_num}d" ${config_file}
-			sed -i "${Modify_num}i\\${Like}" ${config_file}
+			Like="${Like}###${Config_Name}###${Config_Location}###$(echo -e "${Config_old}"|awk -F '###' '{print $4}')"
+			sed -i "${Modify_num} c\\${Like}" ${config_file}
 			if [[ $? == 0 ]]; then
 				echo -e "${Info} 修改成功 ! [${Like}]"
 			else
@@ -677,24 +677,20 @@ Modify_SSRStatus_disabled(){
 	if [[ $? -eq 0 ]]; then
 		if [[ ${Modify_num} -ge 1 ]] && [[ ${Modify_num} -le ${Like_num} ]]; then
 			Config_old=$(echo -e "${Like}"|sed -n "${Modify_num}"p)
-			echo -e "${Config_old}"
-			Config_old_Disabled=$(echo -e "${Config_old}"|awk -F '###' '{print $4}')
-			Config_old=$(echo -e "${Config_old}"|awk -F "###${Config_old_Disabled}" '{print $1}')
-			echo -e "${Config_old_Disabled}\n${Config_old}"
-			if [[ ${Config_old_Disabled} == "true" ]]; then
-				Config_Disabled="false"
-				Like="${Config_old}###${Config_Disabled}"
+			if [[ $(echo -e "${Config_old}"|awk -F '###' '{print $4}') == "true" ]]; then
+				Config_new=$(echo -e "${Config_old}"|sed 's;true;false;')
+				Config_status_old="禁用"
+				Config_status_new="启用"
 			else
-				Config_Disabled="true"
-				Like="${Config_old}###${Config_Disabled}"
+				Config_new=$(echo -e "${Config_old}"|sed 's;false;true;')
+				Config_status_old="启用"
+				Config_status_new="禁用"
 			fi
-			echo -e "${Config_Disabled}\n${Like}"
-			sed -i "${Modify_num}d" ${config_file}
-			sed -i "${Modify_num}i\\${Like}" ${config_file}
+			sed -i "${Modify_num} c\\${Config_new}" ${config_file}
 			if [[ $? == 0 ]]; then
-				echo -e "${Info} 修改成功 ! [账号状态为: ${Config_Disabled}]"
+				echo -e "${Info} 修改成功 ! [账号状态为: ${Green_font_prefix}${Config_status_new}${Font_color_suffix}]"
 			else
-				echo -e "${Error} 修改失败 ! [账号状态为: ${Config_Disabled}]"
+				echo -e "${Error} 修改失败 ! [账号状态为: ${Red_font_prefix}${Config_status_old}${Font_color_suffix}]"
 			fi
 			break
 		else
@@ -720,7 +716,7 @@ Installation_dependency(){
 	cp -f /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 }
 Install_caddy(){
-	echo -e "是否由脚本自动配置HTTP服务(在线监控网站)[Y/n]"
+	echo "是否由脚本自动配置HTTP服务(在线监控网站)[Y/n]"
 	read -e -p "(默认: Y 自动部署):" caddy_yn
 	[[ -z "$caddy_yn" ]] && caddy_yn="y"
 	if [[ "${caddy_yn}" == [Yy] ]]; then
