@@ -5,893 +5,811 @@ export PATH
 #=================================================
 #	System Required: CentOS 6+/Debian 7+/Ubuntu 14.04+
 #	Description: ShadowsocksR Status
-#	Version: 1.0.5
+#	Version: 1.0.9
 #	Author: Toyo
+#	Rewriter: MTimer
 #=================================================
 
-sh_ver="1.0.5"
-Timeout="10"
-Test_URL="https://www.bing.com"
-Web_file="/usr/local/SSRStatus"
-SSR_folder="/usr/local/shadowsocksr/shadowsocks"
-filepath=$(cd "$(dirname "$0")"; pwd)
-file=$(echo -e "${filepath}"|awk -F "$0" '{print $1}')
-log_file="${file}/ssr_status.log"
-config_file="${file}/ssr_status.conf"
-JSON_file="/usr/local/SSRStatus/json/stats.json"
+set -euo pipefail
 
-Green_font_prefix="\033[32m" && Red_font_prefix="\033[31m" && Green_background_prefix="\033[42;37m" && Red_background_prefix="\033[41;37m" && Font_color_suffix="\033[0m"
-Info="${Green_font_prefix}[信息]${Font_color_suffix}" && Error="${Red_font_prefix}[错误]${Font_color_suffix}" && Tip="${Green_font_prefix}[注意]${Font_color_suffix}"
+sh_ver="1.0.9"
+SSR_PATH="/usr/local/shadowsocksr"
+[ -d "/var/www" ] && SSRSTATUS_ROOT="/var/www" || SSRSTATUS_ROOT="/usr/local"
+SSRSTATUS_PATH="$SSRSTATUS_ROOT/SSRStatus"
+LOG_FILE="$SSR_PATH/ssr_status.log"
+CONFIG_FILE="$SSR_PATH/ssr_status.conf"
+CRON_FILE="$SSR_PATH/ssr_status.cron"
+JSON_FILE="$SSRSTATUS_PATH/json/stats.json"
+SH_FILE="/usr/local/bin/ssrs"
+timeout="10"
+test_url="https://www.bing.com"
 
-#检查系统
-check_sys(){
-	if [[ -f /etc/redhat-release ]]; then
-		release="centos"
-	elif cat /etc/issue | grep -q -E -i "debian"; then
-		release="debian"
-	elif cat /etc/issue | grep -q -E -i "ubuntu"; then
-		release="ubuntu"
-	elif cat /etc/issue | grep -q -E -i "centos|red hat|redhat"; then
-		release="centos"
-	elif cat /proc/version | grep -q -E -i "debian"; then
-		release="debian"
-	elif cat /proc/version | grep -q -E -i "ubuntu"; then
-		release="ubuntu"
-	elif cat /proc/version | grep -q -E -i "centos|red hat|redhat"; then
-		release="centos"
-    fi
-	#bit=`uname -m`
-}
-check_installed_server_status(){
-	[[ ! -e "${Web_file}" ]] && echo -e "${Error} SSRStatus Web网页文件没有安装，请检查 !" && exit 1
-}
-Get_IP(){
-	server_s=$(wget -qO- -t1 -T2 ipinfo.io/ip)
-	if [[ -z "${server_s}" ]]; then
-		server_s=$(wget -qO- -t1 -T2 api.ip.sb/ip)
-		if [[ -z "${server_s}" ]]; then
-			server_s=$(wget -qO- -t1 -T2 members.3322.org/dyndns/getip)
-			if [[ -z "${server_s}" ]]; then
-				server_s="VPS_IP"
-			fi
+green="\033[32m"
+red="\033[31m"
+green_background="\033[42;37m"
+red_background="\033[41;37m"
+plain="\033[0m"
+info="${green}[信息]$plain"
+error="${red}[错误]$plain"
+tip="${green}[注意]$plain"
+
+[ $EUID -ne 0 ] && echo -e "[$error] 当前账号非ROOT(或没有ROOT权限),无法继续操作,请使用$green_background sudo su $plain来获取临时ROOT权限（执行后会提示输入当前账号的密码）." && exit 1
+
+CheckRelease()
+{
+	if grep -Eqi "(Red Hat|CentOS|Fedora|Amazon)" < /etc/issue ; then
+		release="rpm"
+	elif grep -Eqi "Debian" < /etc/issue ; then
+		release="deb"
+	elif grep -Eqi "Ubuntu" < /etc/issue ; then
+		release="ubu"
+	else
+		if grep -Eqi "(redhat|centos|Red\ Hat)" < /proc/version ; then
+			release="rpm"
+		elif grep -Eqi "debian" < /proc/version ; then
+			release="deb"
+		elif grep -Eqi "ubuntu" < /proc/version ; then
+			release="ubu"
 		fi
 	fi
+
+	depends=(wget unzip vim curl crond)
+	for depend in "${depends[@]}"; do
+		DEPEND_PATH="$(command -v "$depend" || true)"
+		if [ -z "$DEPEND_PATH" ]; then
+			case "$release" in
+				"rpm") yum -y install "$depend" >/dev/null 2>&1
+				;;
+				"deb"|"ubu") apt-get -y install "$depend" >/dev/null 2>&1
+				;;
+				*) echo -e "\n系统不支持!" && exit 1
+				;;
+			esac
+			
+		fi
+	done
+
+	[ ! "$(wget -V)" ] && ( echo -e "$error 依赖 wget 安装失败..." && exit 1 ) || true
+	[ ! "$(unzip -v)" ] && ( echo -e "$error 依赖 unzip 安装失败..." && exit 1 ) || true
+	[ ! "$(curl -V)" ] && ( echo -e "$error 依赖 curl 安装失败..." && exit 1 ) || true
+	[ ! "$(ls /usr/sbin/cron*)" ] && ( echo -e "$error 依赖 cron 安装失败..." && exit 1) || true
 }
-set_config_ip(){
+
+GetServerIp(){
+    server_ip=$( ip addr | grep -E -o '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | grep -E -v "^192\.168|^172\.1[6-9]\.|^172\.2[0-9]\.|^172\.3[0-2]\.|^10\.|^127\.|^255\.|^0\." | head -n 1 )
+    [ -z "$server_ip" ] && server_ip=$( wget -qO- -t1 -T2 ipv4.icanhazip.com )
+    [ -z "$server_ip" ] && server_ip=$( wget -qO- -t1 -T2 ipinfo.io/ip )
+	[ -z "$server_ip" ] && server_ip=$( wget -qO- -t1 -T2 api.ip.sb/ip )
+    [ -z "$server_ip" ] && echo "无法获取本机IP，请手动输入" && exit 1
+}
+
+SetAccIp(){
 	echo "请输入 ShadowsocksR 账号服务器公网IP"
-	read -e -p "(默认取消):" ip
-	[[ -z "${ip}" ]] && echo "已取消..." && exit 1
-	echo && echo -e "	I   P : ${Red_font_prefix}${ip}${Font_color_suffix}" && echo
+	read -p "(默认取消):" acc_ip
+	[ -z "$acc_ip" ] && echo "已取消..." && exit 1
+	echo && echo -e "	账号IP : $red$acc_ip$plain" && echo
 }
-set_config_port(){
-	while true
-	do
+
+SetAccPort(){
 	echo "请输入 ShadowsocksR 账号端口"
-	read -e -p "(默认: 28989):" port
-	[[ -z "$port" ]] && port="28989"
-	echo $((${port}+0)) &>/dev/null
-	if [[ $? -eq 0 ]]; then
-		if [[ ${port} -ge 1 ]] && [[ ${port} -le 65535 ]]; then
-			echo && echo -e "	端口 : ${Red_font_prefix}${port}${Font_color_suffix}" && echo
-			break
-		else
-			echo -e "${Error} 请输入正确的数字！"
-		fi
-	else
-		echo -e "${Error} 请输入正确的数字！"
-	fi
-	done
-}
-set_config_password(){
-	echo "请输入 ShadowsocksR 账号的密码"
-	read -e -p "(默认: fuckyougfw):" passwd
-	[[ -z "${passwd}" ]] && passwd="fuckyougfw"
-	echo && echo -e "	密码 : ${Red_font_prefix}${passwd}${Font_color_suffix}" && echo
-}
-set_config_method(){
-	echo -e "请选择要设置的ShadowsocksR账号 加密方式
- ${Green_font_prefix} 1.${Font_color_suffix} none
- 
- ${Green_font_prefix} 2.${Font_color_suffix} rc4
- ${Green_font_prefix} 3.${Font_color_suffix} rc4-md5
- ${Green_font_prefix} 4.${Font_color_suffix} rc4-md5-6
- 
- ${Green_font_prefix} 5.${Font_color_suffix} aes-128-ctr
- ${Green_font_prefix} 6.${Font_color_suffix} aes-192-ctr
- ${Green_font_prefix} 7.${Font_color_suffix} aes-256-ctr
- 
- ${Green_font_prefix} 8.${Font_color_suffix} aes-128-cfb
- ${Green_font_prefix} 9.${Font_color_suffix} aes-192-cfb
- ${Green_font_prefix}10.${Font_color_suffix} aes-256-cfb
- 
- ${Green_font_prefix}11.${Font_color_suffix} aes-128-cfb8
- ${Green_font_prefix}12.${Font_color_suffix} aes-192-cfb8
- ${Green_font_prefix}13.${Font_color_suffix} aes-256-cfb8
- 
- ${Green_font_prefix}14.${Font_color_suffix} salsa20
- ${Green_font_prefix}15.${Font_color_suffix} chacha20
- ${Green_font_prefix}16.${Font_color_suffix} chacha20-ietf
- ${Tip} salsa20/chacha20-*系列加密方式，需要额外安装依赖 libsodium ，否则会无法启动ShadowsocksR !" && echo
-	read -e -p "(默认: 10. aes-256-cfb):" method
-	[[ -z "${method}" ]] && method="10"
-	if [[ ${method} == "1" ]]; then
-		method="none"
-	elif [[ ${method} == "2" ]]; then
-		method="rc4"
-	elif [[ ${method} == "3" ]]; then
-		method="rc4-md5"
-	elif [[ ${method} == "4" ]]; then
-		method="rc4-md5-6"
-	elif [[ ${method} == "5" ]]; then
-		method="aes-128-ctr"
-	elif [[ ${method} == "6" ]]; then
-		method="aes-192-ctr"
-	elif [[ ${method} == "7" ]]; then
-		method="aes-256-ctr"
-	elif [[ ${method} == "8" ]]; then
-		method="aes-128-cfb"
-	elif [[ ${method} == "9" ]]; then
-		method="aes-192-cfb"
-	elif [[ ${method} == "10" ]]; then
-		method="aes-256-cfb"
-	elif [[ ${method} == "11" ]]; then
-		method="aes-128-cfb8"
-	elif [[ ${method} == "12" ]]; then
-		method="aes-192-cfb8"
-	elif [[ ${method} == "13" ]]; then
-		method="aes-256-cfb8"
-	elif [[ ${method} == "14" ]]; then
-		method="salsa20"
-	elif [[ ${method} == "15" ]]; then
-		method="chacha20"
-	elif [[ ${method} == "16" ]]; then
-		method="chacha20-ietf"
-	else
-		method="aes-256-cfb"
-	fi
-	echo && echo ${Separator_1} && echo -e "	加密 : ${Red_font_prefix}${method}${Font_color_suffix}" && echo ${Separator_1} && echo
-}
-set_config_protocol(){
-	echo -e "请选择ShadowsocksR账号 协议插件
- ${Green_font_prefix}1.${Font_color_suffix} origin
- ${Green_font_prefix}2.${Font_color_suffix} auth_sha1_v4
- ${Green_font_prefix}3.${Font_color_suffix} auth_aes128_md5
- ${Green_font_prefix}4.${Font_color_suffix} auth_aes128_sha1
- ${Green_font_prefix}5.${Font_color_suffix} auth_chain_a" && echo
-	read -e -p "(默认: 4. auth_aes128_sha1):" protocol
-	[[ -z "${protocol}" ]] && protocol="4"
-	if [[ ${protocol} == "1" ]]; then
-		protocol="origin"
-	elif [[ ${protocol} == "2" ]]; then
-		protocol="auth_sha1_v4"
-	elif [[ ${protocol} == "3" ]]; then
-		protocol="auth_aes128_md5"
-	elif [[ ${protocol} == "4" ]]; then
-		protocol="auth_aes128_sha1"
-	elif [[ ${protocol} == "5" ]]; then
-		protocol="auth_chain_a"
-	else
-		protocol="auth_aes128_sha1"
-	fi
-	echo && echo -e "	协议 : ${Red_font_prefix}${protocol}${Font_color_suffix}" && echo
-}
-set_config_obfs(){
-	echo -e "请选择ShadowsocksR账号 混淆插件
- ${Green_font_prefix}1.${Font_color_suffix} plain
- ${Green_font_prefix}2.${Font_color_suffix} http_simple
- ${Green_font_prefix}3.${Font_color_suffix} http_post
- ${Green_font_prefix}4.${Font_color_suffix} random_head
- ${Green_font_prefix}5.${Font_color_suffix} tls1.2_ticket_auth" && echo
-	read -e -p "(默认: 5. tls1.2_ticket_auth):" obfs
-	[[ -z "${obfs}" ]] && obfs="5"
-	if [[ ${obfs} == "1" ]]; then
-		obfs="plain"
-	elif [[ ${obfs} == "2" ]]; then
-		obfs="http_simple"
-	elif [[ ${obfs} == "3" ]]; then
-		obfs="http_post"
-	elif [[ ${obfs} == "4" ]]; then
-		obfs="random_head"
-	elif [[ ${obfs} == "5" ]]; then
-		obfs="tls1.2_ticket_auth"
-	else
-		obfs="tls1.2_ticket_auth"
-	fi
-	echo && echo -e "	混淆 : ${Red_font_prefix}${obfs}${Font_color_suffix}" && echo
-}
-set_config_like(){
-	echo "请输入 ShadowsocksR 的链接(SS/SSR链接皆可，如 ss://xxxx ssr://xxxx)"
-	read -e -p "(默认回车取消):" Like
-	[[ -z "${Like}" ]] && echo "已取消..." && exit 1
-	echo && echo -e "	链接 : ${Red_font_prefix}${Like}${Font_color_suffix}" && echo
-}
-set_config_user(){
-	echo -e "请输入选择输入方式
- ${Green_font_prefix}1.${Font_color_suffix} 输入ShadowsocksR账号全部信息(Shadowsocks原版也可以)
- ${Green_font_prefix}2.${Font_color_suffix} 输入ShadowsocksR账号的 SSR链接(Shadowsocks原版也可以)"
-	read -e -p "(默认:2):" enter_type
-	[[ -z "${enter_type}" ]] && enter_type="2"
-	if [[ ${enter_type} == "1" ]]; then
-		echo "下面依次开始输入要检测可用性的 ShadowsocksR账号信息。" && echo
-		set_config_ip
-		set_config_port
-		set_config_password
-		set_config_method
-		set_config_protocol
-		set_config_obfs
-		return 1
-	elif [[ ${enter_type} == "2" ]]; then
-		set_config_like
-		return 2
-	else
-		set_config_like
-		return 2
-	fi
-}
-set_config_name(){
-	echo "请输入 ShadowsocksR 账号的名称(用于区分，取个名字，可重复)"
-	read -e -p "(默认取消):" Config_Name
-	[[ -z "${Config_Name}" ]] && echo "已取消..." && exit 1
-	echo && echo -e "	名称 : ${Red_font_prefix}${Config_Name}${Font_color_suffix}" && echo
-}
-set_config_location(){
-	echo "请输入 ShadowsocksR 账号的位置(用于区分，可重复)"
-	read -e -p "(默认取消):" Config_Location
-	[[ -z "${Config_Location}" ]] && echo "已取消..." && exit 1
-	echo && echo -e "	位置 : ${Red_font_prefix}${Config_Location}${Font_color_suffix}" && echo
-}
-Set_server(){
-	echo "请输入 SSRStatus 网站要设置的 域名[server]
-默认为本机IP为域名，例如输入: toyoo.ml，如果要使用本机IP，请留空直接回车"
-	read -e -p "(默认: 本机IP):" server_s
-	[[ -z "$server_s" ]] && Get_IP
-	
-	echo && echo -e "	IP/域名[server]: ${Red_background_prefix} ${server_s} ${Font_color_suffix}" && echo
-}
-Set_server_port(){
-	while true
-		do
-		echo "请输入 SSRStatus 网站要设置的 域名/IP的端口[1-65535]（如果是域名的话，一般建议用 http 80 端口）"
-		read -e -p "(默认: 8888):" server_port_s
-		[[ -z "$server_port_s" ]] && server_port_s="8888"
-		echo $((${server_port_s}+0)) &>/dev/null
-		if [[ $? -eq 0 ]]; then
-			if [[ ${server_port_s} -ge 1 ]] && [[ ${server_port_s} -le 65535 ]]; then
-				echo && echo -e "	IP/域名[server]: ${Red_background_prefix} ${server_port_s} ${Font_color_suffix}" && echo
+	while read -p "(默认: 28989):" acc_port; do
+		case $acc_port in
+			("")
+				acc_port=28989
 				break
-			else
-				echo "输入错误, 请输入正确的端口。"
-			fi
-		else
-			echo "输入错误, 请输入正确的端口。"
-		fi
+			;;
+			(*[!0-9]*)
+				echo -e "$error 请输入正确的数字！"
+			;;
+			(*)
+				if [ $acc_port -ge 1 ] && [ $acc_port -le 65535 ]; then
+					echo && echo -e "	端口: $red_background $acc_port $plain" && echo
+					break
+				else
+					echo -e "$error 请输入正确的数字！"
+				fi
+			;;
+		esac
 	done
 }
-Set_crontab(){
-	echo -e "请选择你要设置的ShadowsocksR账号检测时间间隔（如账号很多，请不要设置时间间隔过小）
- ${Green_font_prefix}1.${Font_color_suffix} 5分钟
- ${Green_font_prefix}2.${Font_color_suffix} 10分钟
- ${Green_font_prefix}3.${Font_color_suffix} 20分钟
- ${Green_font_prefix}4.${Font_color_suffix} 30分钟
- ${Green_font_prefix}5.${Font_color_suffix} 40分钟
- ${Green_font_prefix}6.${Font_color_suffix} 50分钟
- ${Green_font_prefix}7.${Font_color_suffix} 1小时
- ${Green_font_prefix}8.${Font_color_suffix} 2小时
- ${Green_font_prefix}9.${Font_color_suffix} 自定义输入" && echo
-	read -e -p "(默认: 2. 10分钟):" Crontab_time
-	[[ -z "${Crontab_time}" ]] && Crontab_time="2"
-	if [[ ${Crontab_time} == "1" ]]; then
-		Crontab_time="*/5 * * * *"
-	elif [[ ${Crontab_time} == "2" ]]; then
-		Crontab_time="*/10 * * * *"
-	elif [[ ${Crontab_time} == "3" ]]; then
-		Crontab_time="*/20 * * * *"
-	elif [[ ${Crontab_time} == "4" ]]; then
-		Crontab_time="*/30 * * * *"
-	elif [[ ${Crontab_time} == "5" ]]; then
-		Crontab_time="*/40 * * * *"
-	elif [[ ${Crontab_time} == "6" ]]; then
-		Crontab_time="*/50 * * * *"
-	elif [[ ${Crontab_time} == "7" ]]; then
-		Crontab_time="0 * * * *"
-	elif [[ ${Crontab_time} == "8" ]]; then
-		Crontab_time="0 */2 * * *"
-	elif [[ ${Crontab_time} == "9" ]]; then
-		Set_crontab_customize
-	else
-		Crontab_time="*/10 * * * *"
-	fi
-	echo && echo -e "	间隔时间 : ${Red_font_prefix}${Crontab_time}${Font_color_suffix}" && echo
-	Add_Crontab
+
+SetAccPasswd(){
+	echo "请输入 ShadowsocksR 账号的密码"
+	read -p "(默认: fuckyougfw):" passwd
+	[ -z "$passwd" ] && passwd="fuckyougfw"
+	echo && echo -e "	密码 : $red$passwd$plain" && echo
 }
-Set_crontab_customize(){
+
+SetAccMethod(){
+	echo -e "请选择要设置的ShadowsocksR账号 加密方式
+ $green 1.$plain none
+ 
+ $green 2.$plain rc4
+ $green 3.$plain rc4-md5
+ $green 4.$plain rc4-md5-6
+ 
+ $green 5.$plain aes-128-ctr
+ $green 6.$plain aes-192-ctr
+ $green 7.$plain aes-256-ctr
+ 
+ $green 8.$plain aes-128-cfb
+ $green 9.$plain aes-192-cfb
+ ${green}10.$plain aes-256-cfb
+ 
+ ${green}11.$plain aes-128-cfb8
+ ${green}12.$plain aes-192-cfb8
+ ${green}13.$plain aes-256-cfb8
+ 
+ ${green}14.$plain salsa20
+ ${green}15.$plain chacha20
+ ${green}16.$plain chacha20-ietf
+ $tip salsa20/chacha20-*系列加密方式，需要额外安装依赖 libsodium ，否则会无法启动ShadowsocksR !" && echo
+	read -p "(默认: 10. aes-256-cfb):" m_number
+	methods=(
+		none rc4 rc4-md5 rc4-md5-6 aes-128-ctr 
+		aes-192-ctr aes-256-ctr aes-128-cfb aes-192-cfb 
+		aes-256-cfb  aes-128-cfb8 aes-192-cfb8 aes-256-cfb8 
+		salsa20 chacha20 chacha20-ietf 
+	)
+	method=${methods["$m_number" - 1]}
+	[ -z "$method" ] && method=${methods[9]}
+	echo && echo && echo -e "	加密 : $red$method$plain" && echo && echo
+}
+
+SetAccProtocol(){
+	echo -e "请选择ShadowsocksR账号 协议插件
+ ${green}1.$plain origin
+ ${green}2.$plain auth_sha1_v4
+ ${green}3.$plain auth_aes128_md5
+ ${green}4.$plain auth_aes128_sha1
+ ${green}5.$plain auth_chain_a" && echo
+	read -p "(默认: 4. auth_aes128_sha1):" p_number
+	protocols=(
+		origin 
+		auth_sha1_v4 
+		auth_aes128_md5 
+		auth_aes128_sha1 
+		auth_chain_a
+	)
+	protocol=${protocols["$p_number" - 1]}
+	[ -z "$protocol" ] && protocol=${protocols[3]}
+
+	echo && echo -e "	协议 : $red$protocol$plain" && echo
+}
+
+SetAccObfs(){
+	echo -e "请选择ShadowsocksR账号 混淆插件
+ ${green}1.$plain plain
+ ${green}2.$plain http_simple
+ ${green}3.$plain http_post
+ ${green}4.$plain random_head
+ ${green}5.$plain tls1.2_ticket_auth" && echo
+	read -p "(默认: 5. tls1.2_ticket_auth):" o_number
+	obfss=(
+		plain 
+		http_simple 
+		http_post 
+		random_head 
+		tls1.2_ticket_auth
+	)
+	obfs=${obfss["$o_number" - 1]}
+	[ -z "$obfs" ] && obfs=${obfss[4]}
+	echo && echo -e "	混淆 : $red$obfs$plain" && echo
+}
+
+SetAccGroup(){
+	echo "请输入 ShadowsocksR 账号的分组名称"
+	read -p "(默认未分组):" acc_group
+	[ -z "$acc_group" ] && acc_group="未分组"
+	echo && echo -e "	分组 : $red$acc_group$plain" && echo
+}
+
+SetAccPublic(){
+	echo "是否公开 ShadowsocksR 账号的密码?[Y/n]"
+	read -p "(默认是):" acc_public
+	[ -z "$acc_public" ] && acc_public="Y"
+	if [[ "$acc_public" == [Yy] ]]; then
+		acc_public="show"
+		acc_public_text="公开"
+	else
+		acc_public="hide"
+		acc_public_text="隐藏"
+	fi
+	echo && echo -e "	密码状态 : $green$acc_public_text$plain" && echo
+}
+
+DecAccLink(){
+	IFS='://' read acc_type acc_info <<< "$acc_link"
+	acc_info=$(echo "$acc_info"|base64 --decode)
+	if [ "$acc_type" == "ss" ]; then
+		IFS=':' read method passwd_ip acc_port <<< "$acc_info"
+		IFS='@' read passwd acc_ip <<< "$passwd_ip"
+		protocol="origin"
+		obfs="plain"
+	else
+		acc_info_a=$(echo "$acc_info"|awk -F "/?" '{print $1}')
+		IFS=':' read acc_ip acc_port protocol method obfs passwd_base64 <<< "$acc_info_a"
+		passwd=$(echo "$passwd_base64"|base64 --decode)
+		acc_info_b=$(echo "$acc_info"|awk -F "/?" '{print $2}')
+		acc_info_c=$(echo "$acc_info_b"|awk -F "group=" '{print $2}')
+		acc_group=$(echo "$acc_info_c"|awk -F "=" '{print $1}')
+	fi
+	[ -z "$acc_group" ] && acc_group="未分组"
+	echo && echo -e "	链接 : $red$acc_link$plain" && echo
+}
+
+ListAccs(){
+	[ ! -e "$CONFIG_FILE" ] && echo -e "$error 配置文件不存在！($CONFIG_FILE)" | tee -a "$CONFIG_FILE" && exit 1
+	accs=$(cat "$CONFIG_FILE")
+	[ -z "$accs" ] && echo -e "$error 获取SS/SSR账号信息失败或配置文件为空 !" | tee -a "$LOG_FILE" && exit 1
+	accs_num=$(echo -e "$accs"|wc -l)
+	echo -e "目前有 $accs_num 个账号配置\n$(echo -e "$accs"|grep -n "###")"
+}
+
+AddAcc(){
+	if echo "$acc" >> "$CONFIG_FILE" ; then
+		echo -e "$info 添加成功 ! [$acc]"
+	else
+		echo -e "$error 添加失败 ! [$acc]"
+	fi
+}
+
+DelAcc(){
+	ListAccs
+	[ "$accs_num" == "0" ] && echo -e "$error 没有账号!" && exit 1
+	echo "请选择你要删除的账号序号"
+	while read -p "(默认取消):" del_num; do
+		case "$del_num" in
+			("")
+				echo "已取消..." && exit 1
+			;;
+			(*[!0-9]*)
+				echo -e "$error 请输入正确的数字！"
+			;;
+			(*)
+				if [ "$del_num" -ge 1 ] && [ "$del_num" -le "$accs_num" ]; then
+					break;
+				else
+					echo -e "$error 请输入正确的数字！"
+				fi
+			;;
+		esac
+	done
+	if [ "$(sed -i "$del_num"d "$CONFIG_FILE")" ]; then
+		echo -e "$info 删除成功 ! [$del_num]"
+	else
+		echo -e "$error 删除失败 ! [$del_num]"
+	fi
+}
+
+ConfigAcc(){
+	ListAccs
+	[ "$accs_num" == "0" ] && echo -e "$error 没有账号!" && exit 1
+	while read -p "(默认取消):" config_num; do
+		case "$config_num" in
+			("")
+				echo "已取消..." && exit 1
+			;;
+			(*[!0-9]*)
+				echo -e "$error 请输入正确的数字！"
+			;;
+			(*)
+				if [ "$config_num" -ge 1 ] && [ "$config_num" -le "$accs_num" ]; then
+					break;
+				else
+					echo -e "$error 请输入正确的数字！"
+				fi
+			;;
+		esac
+	done
+	AddAccMenu
+	sed -i "${config_num} c\\${acc}" "${CONFIG_FILE}"
+}
+
+ConfigAccStatus(){
+	ListAccs
+	[ "$accs_num" == "0" ] && echo -e "$error 没有账号!" && exit 1
+	echo -e "请选择你要启用/禁用的账号序号"
+	while read -p "(默认取消):" config_status_num; do
+		case "$config_status_num" in
+			("")
+				echo "已取消..." && exit 1
+			;;
+			(*[!0-9]*)
+				echo -e "$error 请输入正确的数字！"
+			;;
+			(*)
+				if [ "$config_status_num" -ge 1 ] && [ "$config_status_num" -le "$accs_num" ]; then
+					break;
+				else
+					echo -e "$error 请输入正确的数字！"
+				fi
+			;;
+		esac
+	done
+
+	acc=$(echo -e "$accs"|sed -n "${config_status_num}"p)
+	acc_status=$(echo -e "$acc"|awk -F '###' '{print $4}')
+	case "$acc_status" in
+		"offline")
+			echo -e "$error 修改失败 ! 无法修改离线账号状态!" && exit 1
+		;;
+		"disabled")
+			acc=$(echo -e "$acc"|sed 's;disabled;enabled;')
+			acc_status_old="禁用"
+			acc_status_new="启用"
+		;;
+		"enabled")
+			acc=$(echo -e "$acc"|sed 's;enabled;disabled;')
+			acc_status_old="启用"
+			acc_status_new="禁用"
+		;;
+		*)
+			echo -e "$error 修改失败 ! 无法查询账号状态 !" && exit 1
+		;;
+	esac
+
+	if [ "$(sed -i "${config_status_num} c\\${acc}" "$CONFIG_FILE")" ]; then
+		echo -e "$info 修改成功 ! [账号状态为: ${green}${acc_status_new}${plain}]"
+	else
+		echo -e "$error 修改失败 ! [账号状态为: ${red}${acc_status_old}${plain}]"
+	fi
+}
+
+AddAccMenu(){
+	echo -e "请选择输入方式
+ ${green}1.$plain 输入ShadowsocksR账号全部信息(Shadowsocks原版也可以)
+ ${green}2.$plain 输入ShadowsocksR账号的 SSR链接(Shadowsocks原版也可以)"
+	read -p "(默认:2):" add_acc_type
+	[ -z "$add_acc_type" ] && add_acc_type="2"
+	if [ "$add_acc_type" == "1" ]; then
+		echo "下面依次开始输入要检测的 ShadowsocksR账号信息。" && echo
+		SetAccIp
+		SetAccPort
+		SetAccPasswd
+		SetAccMethod
+		SetAccProtocol
+		SetAccObfs
+		SetAccGroup
+		SetAccPublic
+	else
+		echo "请输入 ShadowsocksR 的链接(SS/SSR链接皆可，如 ss://xxxx ssr://xxxx)"
+		read -p "(默认回车取消):" acc_link
+		[ -z "$acc_link" ] && echo "已取消..." && exit 1
+	fi
+	acc_status="enabled"
+
+	[ -n "$acc_link" ] && DecAccLink
+	ValidIP
+	if [ "$acc_type" == "ss" ]; then
+		acc_link="ss://"$(echo -n "$method:$passwd@$acc_ip:$acc_port"|base64 -w0 |sed 's/=//g;s/\//_/g;s/+/-/g')
+	else
+		passwd_base64=$(echo -n "$passwd"|base64 -w0 |sed 's/=//g;s/\//_/g;s/+/-/g')
+		acc_link="ssr://"$(echo -n "$acc_ip:$acc_port:$protocol:$method:$obfs:$passwd_base64/?group=$acc_group"|base64 -w0 |sed 's/=//g;s/\//_/g;s/+/-/g')
+	fi
+	acc="$acc_link###$acc_group###$acc_public###enbaled"
+}
+
+ConfigAccMenu(){
+	echo && echo -e " 你要做什么？
+	
+ $green 1.$plain 添加 账号配置
+ $green 2.$plain 删除 账号配置
+ $green 3.$plain 修改 账号配置
+————————
+ $green 4.$plain 启用/禁用 账号配置
+ 注意：添加/修改/删除 账号配置后，不会立即更新，需要自动(定时)/手动检测一次所有账号，网页才会更新 !" && echo
+	read -p "(默认: 取消):" config_acc_type
+	[ -z "$config_acc_type" ] && echo "已取消..." && exit 1
+	if [ "$config_acc_type" == "1" ]; then
+		AddAccMenu
+		AddAcc
+	elif [ "$config_acc_type" == "2" ]; then
+		DelAcc
+	elif [ "$config_acc_type" == "3" ]; then
+		ConfigAcc
+	elif [ "$config_acc_type" == "4" ]; then
+		ConfigAccStatus
+	else
+		echo -e "$error 请输入正确的数字[1-4]" && exit 1
+	fi
+}
+
+SetServerName(){
+	echo "请输入 SSRStatus 网站要设置的 域名[server]
+默认为本机IP为域名，例如输入: domain.com，如果要使用本机IP，请留空直接回车"
+	read -p "(默认: 本机IP):" server_name
+	[ -z "$server_name" ] && GetServerIp && server_name=$server_ip
+	echo && echo -e "	IP/域名[server]: $red_background $server_name $plain" && echo
+}
+
+SetServerPort(){
+	echo "请输入 SSRStatus 网站要设置的 域名/IP的端口[1-65535]（如果是域名的话，一般建议用 http 80 端口）"
+	while read -p "(默认: 8888):" server_port; do
+		case "$server_port" in
+			("")
+				server_port=8888
+			;;
+			(*[!0-9]*)
+				echo -e "$error 请输入正确的端口！"
+			;;
+			(*)
+				if [ "$server_port" -ge 1 ] && [ "$server_port" -le 65535 ]; then
+					echo && echo -e "	IP/域名[server]: $red_background $server_port $plain" && echo
+					break;
+				else
+					echo -e "$error 请输入正确的端口！"
+				fi
+			;;
+		esac
+	done
+}
+
+ViewStatusLog(){
+	[ ! -e $LOG_FILE ] && echo -e "$error 找不到 日志文件！($LOG_FILE)"
+	echo && echo -e "$tip 按 ${red}Ctrl+C$plain 终止查看日志" && echo -e "如果需要查看完整日志内容，请用 ${red}cat $LOG_FILE$plain 命令。" && echo
+	tail -f "$LOG_FILE"
+}
+
+UpdateJson(){
+	acc_time=$(date '+%Y-%m-%d %H:%M:%S')
+	if [ "$1" == "$accs_num" ]; then
+		config_json="${config_json}{ \"acc_ip\": \"$acc_ip:$acc_port\", \"acc_group\": \"$acc_group\", \"method\": \"$method\", \"protocol\": \"$protocol\", \"obfs\": \"$obfs\", \"acc_type\": \"$acc_type\", \"acc_public\": \"$acc_public\", \"acc_status\": $acc_status, \"acc_time\": $acc_time  }\n"
+		config_json="{\n\"servers\": [\n${config_json}],\n\"updated\": \"$(date +%s)\"\n}"
+	else
+		config_json="${config_json}{ \"acc_ip\": \"$acc_ip:$acc_port\", \"acc_group\": \"$acc_group\", \"method\": \"$method\", \"protocol\": \"$protocol\", \"obfs\": \"$obfs\", \"acc_type\": \"$acc_type\", \"acc_public\": \"$acc_public\", \"acc_status\": $acc_status, \"acc_time\": $acc_time  },\n"
+	fi
+}
+
+RandPort(){
+	min=1000
+	rand_port=$(date +%s)
+	rand_port=$("$rand_port"%$min+$min)
+}
+
+ValidIP(){
+	re='^(0*(1?[0-9]{1,2}|2([0-4][0-9]|5[0-5]))\.){3}'
+	re+='0*(1?[0-9]{1,2}|2([‌​0-4][0-9]|5[0-5]))$'
+	if [[ ! $acc_ip =~ $re ]]; then
+		echo -e "$error 错误，IP格式错误[ $acc_ip ]" | tee -a "$LOG_FILE"
+	fi
+}
+
+LogStart(){
+	echo -e "========== 开始记录测试信息 [$(date '+%Y-%m-%d %H:%M:%S')]==========\n" >> "$LOG_FILE"
+}
+
+LogEnd(){
+	echo -e "========== 记录测试信息结束 [$(date '+%Y-%m-%d %H:%M:%S')]==========\n\n" >> "$LOG_FILE"
+}
+
+TestOneAcc(){
+	[ -n "$acc_link" ] && DecAccLink
+	ValidIP
+
+	if [ "$acc_type" == "ss" ]; then
+		echo -e "$method:$passwd@$acc_ip:$acc_port"
+	else
+		echo -e "$acc_ip:$acc_port:$protocol:$method:$obfs:$passwd_base64/?group=$acc_group"	
+	fi
+
+	if [ -z "$acc_ip" ] || [ -z "$acc_port" ] || [ -z "$method" ] || [ -z "$passwd" ] || [ -z "$protocol" ] || [ -z "$obfs" ]; then
+		echo -e "$error 错误，有部分 账号参数为空！[ $acc_ip ,$acc_port ,$method ,$passwd ,$protocol ,$obfs ]" | tee -a "$LOG_FILE"
+	fi
+
+	RandPort
+	nohup python "$SSR_PATH/shadwosocks/local.py" -b "127.0.0.1" -l "$rand_port" -s "$server_ip" -p "$server_port" -k "$passwd" -m "$method" -O "$protocol" -o "$obfs" > /dev/null 2>&1 &
+	sleep 2s
+	
+	PID=$(pgrep -f "local.py" | grep "$rand_port")
+
+	[ -z "$PID" ] && echo -e "$error ShadowsocksR客户端 启动失败，请检查 !" | tee -a "$LOG_FILE"
+
+	test_results=$(curl --socks5 127.0.0.1:"$rand_port" -k -m "$timeout" -s "$test_url")
+	if [ -z "$test_results" ]; then
+		echo -e "$error [$acc_ip] 检测失败，账号不可用，重新尝试一次..." | tee -a $"$LOG_FILE"
+		sleep 2s
+		test_results=$(curl --socks5 127.0.0.1:"$rand_port" -k -m ${timeout} -s "$test_url")
+		if [ -z "$test_results" ]; then
+			acc_status="offline"
+			echo -e "$error [$acc_ip] 检测失败，账号不可用(已重新尝试) !" | tee -a "$LOG_FILE"
+		else
+			acc_status="enabled"
+			echo -e "$info [$acc_ip] 检测成功，账号可用 !" | tee -a "$LOG_FILE"
+		fi
+	else
+		acc_status="enabled"
+		echo -e "$info [$acc_ip] 检测成功，账号可用 !" | tee -a "$LOG_FILE"
+	fi
+	kill -9 "$PID"
+
+	if ! pgrep -f "local.py"|grep -q "$rand_port" ; then
+		echo -e "$error ShadowsocksR客户端 停止失败，请检查 !" | tee -a "$LOG_FILE"
+	fi
+	echo "---------------------------------------------------------"
+}
+
+TestAllAccs(){
+	ListAccs
+	LogStart
+	config_json=""
+	for((integer = 1; integer <= "$accs_num"; integer++)); do
+		acc=$(echo -e "$accs"|sed -n "$integer"p)
+		IFS='###' read acc_link acc_group acc_public acc_status <<< "$acc"
+		if [ "$acc_status" != "disabled" ]; then
+			TestOneAcc
+			UpdateJson "$integer"
+		fi
+	done
+	echo -e "$config_json" > "$JSON_FILE"
+	LogEnd
+}
+
+TestOneAccMenu(){
+	ListAccs
+	LogStart
+	echo "请选择你要单独测试的账号序号"
+	while read -p "(默认取消):" test_acc_num; do
+		case "$test_acc_num" in
+			("")
+				echo "已取消..." && exit 1
+			;;
+			(*[!0-9]*)
+				echo -e "$error 请输入正确的数字！"
+			;;
+			(*)
+				if [ "$test_acc_num" -ge 1 ] && [ "$test_acc_num" -le "$accs_num" ]; then
+					break;
+				else
+					echo -e "$error 请输入正确的数字！"
+				fi
+			;;
+		esac
+	done
+
+	acc=$(echo -e "$accs"|sed -n "$test_acc_num"p)
+	IFS='###' read acc_link acc_group acc_public acc_status <<< "$acc"
+	if [ "$acc_status" != "disabled" ]; then
+		TestOneAcc
+	fi
+	LogEnd
+}
+
+TestNewAcc(){
+	AddAccMenu
+	TestOneAcc
+	LogEnd
+}
+
+ChangeDate(){
+	rm -rf /etc/localtime
+	ln -s /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+}
+
+UpdateCron(){
+	[ -z $release ] && CheckRelease
+	case "$release" in
+		"rpm") /etc/init.d/crond restart
+		;;
+		"deb") /etc/init.d/cron restart
+		;;
+		*) echo "$error 重启cron发生错误!"
+		;;
+	esac
+}
+
+CrontabMenu(){
+	[ ! -d "$SSRSTATUS_PATH" ] && echo -e "$error SSRStatus 网页文件没有安装，请检查 !" && exit 1
+	echo -e "请选择你要设置的ShadowsocksR账号检测时间间隔（如账号很多，请不要设置时间间隔过小）
+ ${green}1.$plain 5分钟
+ ${green}2.$plain 10分钟
+ ${green}3.$plain 20分钟
+ ${green}4.$plain 30分钟
+ ${green}5.$plain 40分钟
+ ${green}6.$plain 50分钟
+ ${green}7.$plain 1小时
+ ${green}8.$plain 2小时
+ ${green}9.$plain 自定义输入" && echo
+	read -p "(默认: 2. 10分钟):" c_number
+	crontabs=(
+		"*/5 * * * *" 
+		"*/10 * * * *" 
+		"*/20 * * * *" 
+		"*/30 * * * *" 
+		"*/40 * * * *" 
+		"*/50 * * * *" 
+		"0 * * * *" 
+		"0 */2 * * *" 
+	)
+	if [ "$c_number" == "9" ]; then
+		CrontabCustom
+	else
+		cron_time=${crontabs["$c_number" - 1]}
+		[ -z "$cron_time" ] && cron_time=${crontabs[1]}
+	fi
+	echo && echo -e "	间隔时间 : $red$cron_time$plain" && echo
+	AddCrontab
+}
+
+AddCrontab(){
+	crontab -l > "$CRON_FILE"
+	sed -i "/ssrs/d" "$CRON_FILE"
+	echo -e "\n$cron_time /bin/bash $SH_FILE t" >> "$CRON_FILE"
+	crontab "$CRON_FILE"
+	cron_config=$(crontab -l | grep "ssrs")
+	if [ -z "$cron_config" ]; then
+		echo -e "$error 添加 Crontab 定时任务失败 !" && exit 1
+	else
+		echo -e "$info 添加 Crontab 定时任务成功 !"
+	fi
+}
+
+DelCrontab(){
+	crontab -r "$CRON_FILE"
+	cron_config=$(crontab -l | grep "ssrs")
+	if [ -n "$cron_config" ]; then
+		echo -e "$error 删除 Crontab 定时任务失败 !" && exit 1
+	else
+		echo -e "$info 删除 Crontab 定时任务成功 !"
+	fi
+	sed -i "/ssrs/d" "$CRON_FILE"
+	rm -rf "$CRON_FILE"
+}
+
+CrontabCustom(){
 	echo -e "请输入ShadowsocksR账号检测时间间隔（如账号很多，请不要设置时间间隔过小）
  === 格式说明 ===
  * * * * * 分别对应 分钟 小时 日份 月份 星期
- ${Green_font_prefix} */10 * * * * ${Font_color_suffix} 代表每10分钟 检测一次
- ${Green_font_prefix} 0 */2 * * * ${Font_color_suffix} 代表每2小时的0分 检测一次
- ${Green_font_prefix} 10 * * * * ${Font_color_suffix} 代表每小时的第10分 检测一次
- ${Green_font_prefix} * 2 * * * ${Font_color_suffix} 代表每天的第2点 检测一次
- ${Green_font_prefix} 0 0 2 * * ${Font_color_suffix} 代表每2天的0点0分 检测一次" && echo
-	read -e -p "(默认: */10 * * * *):" Crontab_time
-	[[ -z "${Crontab_time}" ]] && Crontab_time="*/10 * * * *"
+ $green */10 * * * * $plain 代表每10分钟 检测一次
+ $green 0 */2 * * * $plain 代表每2小时的0分 检测一次
+ $green 10 * * * * $plain 代表每小时的第10分 检测一次
+ $green * 2 * * * $plain 代表每天的第2点 检测一次
+ $green 0 0 2 * * $plain 代表每2天的0点0分 检测一次" && echo
+	read -p "(默认: */10 * * * *):" cron_time
+	[ -z "$cron_time" ] && cron_time="*/10 * * * *"
 }
-GO(){
-	echo -e "========== 开始记录测试信息 [$(date '+%Y-%m-%d %H:%M:%S')]==========\n" >> ${log_file}
-}
-exit_GG(){
-	echo -e "========== 记录测试信息结束 [$(date '+%Y-%m-%d %H:%M:%S')]==========\n\n" >> ${log_file}
-	if [[ ${analysis_type} != "add" ]]; then
-		Config_JSON="{\n\"servers\": [\n${Config_JSON}],\n\"updated\": \"$(date +%s)\"\n}"
-		echo -e "${Config_JSON}" > ${JSON_file}
-	fi
-	exit 0
-}
-Continue_if(){
-	Config_Status="false"
-	[[ -z ${ip} ]] && ip="---.---.---.---"
-	if [[ ${Like_num} == ${integer} ]]; then
-		Config_JSON="${Config_JSON}{ \"ip\": \"${ip}\", \"name\": \"${Config_Name}\", \"type\": \"${Config_Type}\", \"type_1\": \"${Config_Type_1}\", \"location\": \"${Config_Location}\", \"status\": ${Config_Status}, \"time\": \"$(date '+%Y-%m-%d %H:%M:%S')\"  }\n"
-	else
-		Config_JSON="${Config_JSON}{ \"ip\": \"${ip}\", \"name\": \"${Config_Name}\", \"type\": \"${Config_Type}\", \"type_1\": \"${Config_Type_1}\", \"location\": \"${Config_Location}\", \"status\": ${Config_Status}, \"time\": \"$(date '+%Y-%m-%d %H:%M:%S')\"  },\n"
-	fi
-	continue
-}
-Get_Like(){
-	[[ ! -e ${config_file} ]] && echo -e "${Error} 配置文件不存在！(${config_file})" | tee -a ${log_file} && exit 0
-	Like=$(cat "${config_file}")
-	[[ -z ${Like} ]] && echo -e "${Error} 获取SS/SSR账号信息失败或配置文件为空 !" | tee -a ${log_file} && exit 0
-	Like_num=$(echo -e "${Like}"|wc -l)
-}
-Analysis_Config(){
-	Config=$(echo -e "${Like}"|sed -n "$1"p)
-	Config_info_base64=$(echo "${Config}"|awk -F '###' '{print $1}')
-	Config_Name=$(echo "${Config}"|awk -F '###' '{print $2}')
-	Config_Location=$(echo "${Config}"|awk -F '###' '{print $3}')
-	Config_Disabled=$(echo "${Config}"|awk -F '###' '{print $4}')
-	if [[ ${Config_Disabled} == "true" ]]; then
-		echo -e "${Info} 账号已禁用，跳过检测 [${Config_info_base64}] !" | tee -a ${log_file}
-		echo "---------------------------------------------------------"
-		continue
-	else
-		Config_info_base64_determine=$(echo -e ${Config_info_base64}|cut -c 1-6)
-		if [[ "${Config_info_base64_determine}" == "ssr://" ]]; then
-			Config_Type="ShadowsocksR"
-			Config_Type_1="SSR"
-			Config_info=$(echo -e "${Config_info_base64}"|cut -c 7-2000|base64 -d)
-			if [[ -z ${Config_info} ]]; then
-				echo -e "${Error} Base64解密失败 [${Config_info_base64}] !" | tee -a ${log_file}
-				if [[ ${analysis_type} == "add" ]]; then
-					exit_GG
-				else
-					Continue_if
-				fi
-			fi
-			ssr_config
-		else
-			Config_Type="Shadowsocks"
-			Config_Type_1="SS"
-			Config_info=$(echo -e "${Config_info_base64}"|cut -c 6-2000|base64 -d)
-			if [[ -z ${Config_info} ]]; then
-				echo -e "${Error} Base64解密失败 [${Config_info_base64}] !" | tee -a ${log_file}
-				if [[ ${analysis_type} == "add" ]]; then
-					exit_GG
-				else
-					Continue_if
-				fi
-			fi
-			ss_config
-		fi
-	fi
-}
-ss_config(){
-	zuo=$(echo -e "${Config_info}"|awk -F "@" '{print $1}')
-	you=$(echo -e "${Config_info}"|awk -F "@" '{print $2}')
-	port=$(echo -e "${you}"|awk -F ":" '{print $NF}')
-	ip=$(echo -e "${you}"|awk -F ":${port}" '{print $1}')
-	if [[ $(echo -e "${ip}"|wc -L) -lt 7 ]]; then
-		echo -e "${Error} 错误，IP格式错误或为 ipv6地址[ ${ip} ]" | tee -a ${log_file}
-		if [[ ${analysis_type} == "add" ]]; then
-			exit_GG
-		else
-			Continue_if
-		fi
-	fi
-	method=$(echo -e "${zuo}"|awk -F ":" '{print $1}')
-	passwd=$(echo -e "${zuo}"|awk -F ":" '{print $2}')
-	protocol="origin"
-	obfs="plain"
-	echo -e "${ip} ${port} ${method} ${passwd} ${protocol} ${obfs}"
-	if [[ -z ${ip} ]] || [[ -z ${port} ]] || [[ -z ${method} ]] || [[ -z ${passwd} ]] || [[ -z ${protocol} ]] || [[ -z ${obfs} ]]; then
-		echo -e "${Error} 错误，有部分 账号参数为空！[ ${ip} ,${port} ,${method} ,${passwd} ,${protocol} ,${obfs} ]" | tee -a ${log_file}
-		if [[ ${analysis_type} == "add" ]]; then
-			exit_GG
-		else
-			Continue_if
-		fi
-	fi
-}
-ssr_config(){
-	zuo=$(echo -e "${Config_info}"|awk -F "/?" '{print $1}')
-	passwd_base64=$(echo -e "${zuo}"|awk -F ":" '{print $NF}')
-	zuo=$(echo -e "${Config_info}"|awk -F ":${passwd_base64}" '{print $1}')
-	obfs=$(echo -e "${zuo}"|awk -F ":" '{print $NF}')
-	zuo=$(echo -e "${Config_info}"|awk -F ":${obfs}" '{print $1}')
-	method=$(echo -e "${zuo}"|awk -F ":" '{print $NF}')
-	zuo=$(echo -e "${Config_info}"|awk -F ":${method}" '{print $1}')
-	protocol=$(echo -e "${zuo}"|awk -F ":" '{print $NF}')
-	zuo=$(echo -e "${Config_info}"|awk -F ":${protocol}" '{print $1}')
-	port=$(echo -e "${zuo}"|awk -F ":" '{print $NF}')
-	ip=$(echo -e "${Config_info}"|awk -F ":${port}" '{print $1}')
-	if [[ $(echo -e "${ip}"|wc -L) -lt 7 ]]; then
-		echo -e "${Error} 错误，IP格式错误[ ${ip} ]" | tee -a ${log_file}
-		if [[ ${analysis_type} == "add" ]]; then
-			exit_GG
-		else
-			Continue_if
-		fi
-	fi
-	passwd=$(echo -e "${passwd_base64}"|base64 -d)
-	echo -e "${ip} ${port} ${method} ${passwd} ${protocol} ${obfs}"
-	if [[ -z ${ip} ]] || [[ -z ${port} ]] || [[ -z ${method} ]] || [[ -z ${passwd} ]] || [[ -z ${protocol} ]] || [[ -z ${obfs} ]]; then
-		echo -e "${Error} 错误，有部分 账号参数为空！[ ${ip} ,${port} ,${method} ,${passwd} ,${protocol} ,${obfs} ]" | tee -a ${log_file}
-		if [[ ${analysis_type} == "add" ]]; then
-			exit_GG
-		else
-			Continue_if
-		fi
-	fi
-}
-Start_Client(){
-	nohup python "${SSR_folder}/local.py" -b "127.0.0.1" -l "${local_port}" -s "${ip}" -p "${port}" -k "${passwd}" -m "${method}" -O "${protocol}" -o "${obfs}" > /dev/null 2>&1 &
-	sleep 2s
-	PID=$(ps -ef |grep -v grep | grep "local.py" | grep "${local_port}" |awk '{print $2}')
-	if [[ -z ${PID} ]]; then
-		echo -e "${Error} ShadowsocksR客户端 启动失败，请检查 !" | tee -a ${log_file}
-		if [[ ${analysis_type} == "add" ]]; then
-			exit_GG
-		else
-			Continue_if
-		fi
-	fi
-}
-Socks5_test(){
-	Test_results=$(curl --socks5 127.0.0.1:${local_port} -k -m ${Timeout} -s "${Test_URL}")
-	if [[ -z ${Test_results} ]]; then
-		echo -e "${Error} [${ip}] 检测失败，账号不可用，重新尝试一次..." | tee -a ${log_file}
-		sleep 2s
-		Test_results=$(curl --socks5 127.0.0.1:${local_port} -k -m ${Timeout} -s "${Test_URL}")
-		if [[ -z ${Test_results} ]]; then
-			echo -e "${Error} [${ip}] 检测失败，账号不可用(已重新尝试) !" | tee -a ${log_file}
-			Config_Status="false"
-		else
-			echo -e "${Info} [${ip}] 检测成功，账号可用 !" | tee -a ${log_file}
-			Config_Status="true"
-		fi
-	else
-		echo -e "${Info} [${ip}] 检测成功，账号可用 !" | tee -a ${log_file}
-		Config_Status="true"
-	fi
-	kill -9 ${PID}
-	PID=$(ps -ef |grep -v grep | grep "local.py" | grep "${local_port}" |awk '{print $2}')
-	if [[ ! -z ${PID} ]]; then
-		echo -e "${Error} ShadowsocksR客户端 停止失败，请检查 !" | tee -a ${log_file}
-		if [[ ${analysis_type} == "add" ]]; then
-			exit_GG
-		else
-			Continue_if
-		fi
-	fi
-	echo "---------------------------------------------------------"
-	if [[ ${analysis_type} != "add" ]]; then
-		if [[ ${Like_num} == ${integer} ]]; then
-			Config_JSON="${Config_JSON}{ \"ip\": \"${ip}\", \"name\": \"${Config_Name}\", \"type\": \"${Config_Type}\", \"type_1\": \"${Config_Type_1}\", \"location\": \"${Config_Location}\", \"status\": ${Config_Status}, \"time\": \"$(date '+%Y-%m-%d %H:%M:%S')\"  }\n"
-		else
-			Config_JSON="${Config_JSON}{ \"ip\": \"${ip}\", \"name\": \"${Config_Name}\", \"type\": \"${Config_Type}\", \"type_1\": \"${Config_Type_1}\", \"location\": \"${Config_Location}\", \"status\": ${Config_Status}, \"time\": \"$(date '+%Y-%m-%d %H:%M:%S')\"  },\n"
-		fi
-	fi
-}
-rand(){
-	min=1000
-	max=$((2000-$min+1))
-	num=$(date +%s%N)
-	echo $(($num%$max+$min))
-}
-Test(){
-	GO
-	Get_Like
-	cd ${SSR_folder}
-	local_port=$(rand)
-	for((integer = 1; integer <= "${Like_num}"; integer++))
-	do
-		Analysis_Config "${integer}"
-		Start_Client
-		Socks5_test
-	done
-	exit_GG
-}
-Test_add(){
-	analysis_type="add"
-	GO
-	cd ${SSR_folder}
-	local_port=$(rand)
-	set_config_user
-	[[ $? == 2 ]] && Analysis_Config "1"
-	Start_Client
-	Socks5_test
-	exit_GG
-}
-Test_one(){
-	List_SSRStatus
-	cd ${SSR_folder}
-	local_port=$(rand)
-	while true
-	do
-	echo "请选择你要单独测试的账号序号"
-	read -e -p "(默认取消):" Test_one_num
-	[[ -z "${Test_one_num}" ]] && echo "已取消..." && exit 1
-	echo $((${Test_one_num}+0)) &>/dev/null
-	if [[ $? -eq 0 ]]; then
-		if [[ ${Test_one_num} -ge 1 ]] && [[ ${Test_one_num} -le ${Like_num} ]]; then
-			analysis_type="add" && Analysis_Config "${Test_one_num}"
-			Start_Client
-			Socks5_test
-			break
-		else
-			echo -e "${Error} 请输入正确的数字！"
-		fi
-	else
-		echo -e "${Error} 请输入正确的数字！"
-	fi
-	done
-}
-View_log(){
-	[[ ! -e ${log_file} ]] && echo -e "${Error} 找不到 日志文件！(${log_file})"
-	echo && echo -e "${Tip} 按 ${Red_font_prefix}Ctrl+C${Font_color_suffix} 终止查看日志" && echo -e "如果需要查看完整日志内容，请用 ${Red_font_prefix}cat ${log_file}${Font_color_suffix} 命令。" && echo
-	cat "${log_file}"
-}
-Set_SSRStatus(){
-	check_installed_server_status
-	echo && echo -e " 你要做什么？
-	
- ${Green_font_prefix} 1.${Font_color_suffix} 添加 账号配置
- ${Green_font_prefix} 2.${Font_color_suffix} 删除 账号配置
- ${Green_font_prefix} 3.${Font_color_suffix} 修改 账号配置
-————————
- ${Green_font_prefix} 4.${Font_color_suffix} 启用/禁用 账号配置
- 注意：添加/修改/删除 账号配置后，不会立即更新，需要自动(定时)/手动检测一次所有账号，网页才会更新 !" && echo
-	read -e -p "(默认: 取消):" server_num
-	[[ -z "${server_num}" ]] && echo "已取消..." && exit 1
-	if [[ ${server_num} == "1" ]]; then
-		Add_SSRStatus
-	elif [[ ${server_num} == "2" ]]; then
-		Del_SSRStatus
-	elif [[ ${server_num} == "3" ]]; then
-		Modify_SSRStatus
-	elif [[ ${server_num} == "4" ]]; then
-		Modify_SSRStatus_disabled
-	else
-		echo -e "${Error} 请输入正确的数字[1-4]" && exit 1
-	fi
-}
-List_SSRStatus(){
-	Get_Like
-	echo -e "目前有 ${Like_num} 个账号配置\n$(echo -e "${Like}"|grep -n "#")"
-}
-Add_SSRStatus(){
-	set_config_user
-	if [[ $? == 1 ]]; then
-		if [[ ${protocol} == "origin" ]] && [[ ${obfs} == "plain" ]]; then
-			Like_base64=$(echo -n "${method}:${passwd}@${ip}:${port}"|base64|sed ':a;N;s/\n/ /g;ta'|sed 's/ //g;s/=//g')
-			Like="ss://"${Like_base64}
-		else
-			passwd_base64=$(echo -n "${passwd}"|base64|sed ':a;N;s/\n/ /g;ta'|sed 's/ //g;s/=//g')
-			Like_base64=$(echo -n "${ip}:${port}:${protocol}:${method}:${obfs}:${passwd_base64}"|base64|sed ':a;N;s/\n/ /g;ta'|sed 's/ //g;s/=//g')
-			Like="ssr://"${Like_base64}
-		fi
-	fi
-	set_config_name
-	set_config_location
-	Like="${Like}###${Config_Name}###${Config_Location}###false"
-	echo -e "${Like}" >> ${config_file}
-	if [[ $? == 0 ]]; then
-		echo -e "${Info} 添加成功 ! [${Like}]"
-	else
-		echo -e "${Error} 添加失败 ! [${Like}]"
-	fi
-}
-Del_SSRStatus(){
-	List_SSRStatus
-	[[ ${Like_num} == 1 ]] && echo -e "${Error} 当前仅剩一个账号配置，无法删除 !" && exit 0
-	while true
-	do
-	echo "请选择你要删除的账号序号"
-	read -e -p "(默认取消):" Del_num
-	[[ -z "${Del_num}" ]] && echo "已取消..." && exit 1
-	echo $((${Del_num}+0)) &>/dev/null
-	if [[ $? -eq 0 ]]; then
-		if [[ ${Del_num} -ge 1 ]] && [[ ${Del_num} -le ${Like_num} ]]; then
-			sed -i "${Del_num}d" ${config_file}
-			if [[ $? == 0 ]]; then
-				echo -e "${Info} 删除成功 ! [${Del_num}]"
-			else
-				echo -e "${Error} 删除失败 ! [${Del_num}]"
-			fi
-			break
-		else
-			echo -e "${Error} 请输入正确的数字！"
-		fi
-	else
-		echo -e "${Error} 请输入正确的数字！"
-	fi
-	done
-}
-Modify_SSRStatus(){
-	List_SSRStatus
-	while true
-	do
-	echo "请选择你要修改的账号序号"
-	read -e -p "(默认取消):" Modify_num
-	[[ -z "${Modify_num}" ]] && echo "已取消..." && exit 1
-	echo $((${Modify_num}+0)) &>/dev/null
-	if [[ $? -eq 0 ]]; then
-		if [[ ${Modify_num} -ge 1 ]] && [[ ${Modify_num} -le ${Like_num} ]]; then
-			Config_old=$(echo -e "${Like}"|sed -n "${Modify_num}"p)
-			set_config_user
-			if [[ $? == 1 ]]; then
-				if [[ ${protocol} == "origin" ]] && [[ ${obfs} == "plain" ]]; then
-					Like_base64=$(echo -n "${method}:${passwd}@${ip}:${port}"|base64|sed ':a;N;s/\n/ /g;ta'|sed 's/ //g;s/=//g')
-					Like="ss://"${Like_base64}
-				else
-					passwd_base64=$(echo -n "${passwd}"|base64|sed ':a;N;s/\n/ /g;ta'|sed 's/ //g;s/=//g')
-					Like_base64=$(echo -n "${ip}:${port}:${protocol}:${method}:${obfs}:${passwd_base64}"|base64|sed ':a;N;s/\n/ /g;ta'|sed 's/ //g;s/=//g')
-					Like="ssr://"${Like_base64}
-				fi
-			fi
-			set_config_name
-			set_config_location
-			Like="${Like}###${Config_Name}###${Config_Location}###$(echo -e "${Config_old}"|awk -F '###' '{print $4}')"
-			sed -i "${Modify_num} c\\${Like}" ${config_file}
-			if [[ $? == 0 ]]; then
-				echo -e "${Info} 修改成功 ! [${Like}]"
-			else
-				echo -e "${Error} 修改失败 ! [${Like}]"
-			fi
-			break
-		else
-			echo -e "${Error} 请输入正确的数字！"
-		fi
-	else
-		echo -e "${Error} 请输入正确的数字！"
-	fi
-	done
-}
-Modify_SSRStatus_disabled(){
-	List_SSRStatus
-	while true
-	do
-	echo -e "请选择你要启用/禁用的账号序号"
-	read -e -p "(默认取消):" Modify_num
-	[[ -z "${Modify_num}" ]] && echo "已取消..." && exit 1
-	echo $((${Modify_num}+0)) &>/dev/null
-	if [[ $? -eq 0 ]]; then
-		if [[ ${Modify_num} -ge 1 ]] && [[ ${Modify_num} -le ${Like_num} ]]; then
-			Config_old=$(echo -e "${Like}"|sed -n "${Modify_num}"p)
-			if [[ $(echo -e "${Config_old}"|awk -F '###' '{print $4}') == "true" ]]; then
-				Config_new=$(echo -e "${Config_old}"|sed 's;true;false;')
-				Config_status_old="禁用"
-				Config_status_new="启用"
-			else
-				Config_new=$(echo -e "${Config_old}"|sed 's;false;true;')
-				Config_status_old="启用"
-				Config_status_new="禁用"
-			fi
-			sed -i "${Modify_num} c\\${Config_new}" ${config_file}
-			if [[ $? == 0 ]]; then
-				echo -e "${Info} 修改成功 ! [账号状态为: ${Green_font_prefix}${Config_status_new}${Font_color_suffix}]"
-			else
-				echo -e "${Error} 修改失败 ! [账号状态为: ${Red_font_prefix}${Config_status_old}${Font_color_suffix}]"
-			fi
-			break
-		else
-			echo -e "${Error} 请输入正确的数字！"
-		fi
-	else
-		echo -e "${Error} 请输入正确的数字！"
-	fi
-	done
-}
-Installation_dependency(){
-	if [[ ${release} == "centos" ]]; then
-		yum update
-		yum install -y unzip vim curl crond
-		[[ -z $(ls /usr/sbin/crond) ]] && echo -e "${Error} 依赖 crond 安装失败..." && exit 0
-	else
-		apt-get update
-		apt-get install -y unzip vim curl cron
-		[[ -z $(ls /usr/sbin/cron) ]] && echo -e "${Error} 依赖 cron 安装失败..." && exit 0
-	fi
-	[[ -z $(unzip --help) ]] && echo -e "${Error} 依赖 unzip 安装失败..." && exit 0
-	[[ -z $(curl --help) ]] && echo -e "${Error} 依赖 curl 安装失败..." && exit 0
-	cp -f /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
-}
-Install_caddy(){
+
+InstallCaddy(){
 	echo "是否由脚本自动配置HTTP服务(在线监控网站)[Y/n]"
-	read -e -p "(默认: Y 自动部署):" caddy_yn
-	[[ -z "$caddy_yn" ]] && caddy_yn="y"
-	if [[ "${caddy_yn}" == [Yy] ]]; then
-		Set_server
-		Set_server_port
-		if [[ ! -e "/usr/local/caddy/caddy" ]]; then
-			wget -N --no-check-certificate https://raw.githubusercontent.com/woniuzfb/doubi/master/caddy_install.sh
-			chmod +x caddy_install.sh
-			bash caddy_install.sh install
-			[[ ! -e "/usr/local/caddy/caddy" ]] && echo -e "${Error} Caddy安装失败，请手动部署，Web网页文件位置：${Web_file}" && exit 0
-		else
-			echo -e "${Info} 发现Caddy已安装，开始配置..."
-		fi
-		if [[ ! -s "/usr/local/caddy/Caddyfile" ]]; then
-			cat > "/usr/local/caddy/Caddyfile"<<-EOF
-http://${server_s}:${server_port_s} {
- root ${Web_file}
- timeouts none
- gzip
-}
-EOF
-			/etc/init.d/caddy restart
-		else
-			echo -e "${Info} 发现 Caddy 配置文件非空，开始追加 ServerStatus 网站配置内容到文件最后..."
-			cat >> "/usr/local/caddy/Caddyfile"<<-EOF
-http://${server_s}:${server_port_s} {
- root ${Web_file}
- timeouts none
- gzip
-}
-EOF
-			/etc/init.d/caddy restart
-		fi
+	read -p "(默认: Y 自动部署):" install_caddy_yn
+	[ -z "$install_caddy_yn" ] && install_caddy_yn="y"
+	if [[ "$install_caddy_yn" == [Yy] ]]; then
+		SetServerName
+		SetServerPort
+		wget -qO --no-check-certificate https://raw.githubusercontent.com/woniuzfb/doubi/master/caddy_install.sh
+		chmod +x caddy_install.sh
+		bash caddy_install.sh install
+		[ ! -e "$SSRSTATUS_PATH/caddy" ] && echo -e "$error Caddy安装失败，请手动部署，Web网页文件位置：$SSRSTATUS_PATH" && exit 1
+
+		cat >> "$SSRSTATUS_PATH/Caddyfile"<<-EOF
+		http://$server_name:$server_port {
+			root $SSRSTATUS_PATH
+			timeouts none
+			gzip
+		}
+		EOF
+		/etc/init.d/caddy restart
 	else
-		echo -e "${Info} 跳过 HTTP服务部署，请手动部署，Web网页文件位置：${Web_file} !"
+		echo -e "$info 跳过 HTTP服务部署，请手动部署，Web网页文件位置：$SSRSTATUS_PATH !"
 	fi
 }
-Download_SSRStatus(){
-	cd "/usr/local"
-	wget -N --no-check-certificate "https://github.com/ToyoDAdoubi/SSRStatus/archive/master.zip"
-	[[ ! -e "master.zip" ]] && echo -e "${Error} SSRStatus 网页文件下载失败 !" && exit 1
-	unzip master.zip && rm -rf master.zip
-	[[ ! -e "SSRStatus-master" ]] && echo -e "${Error} SSRStatus 网页文件解压失败 !" && exit 1
-	mv SSRStatus-master SSRStatus
-	[[ ! -e "${Web_file}" ]] && echo -e "${Error} SSRStatus 网页文件文件夹重命名失败 !" && rm -rf SSRStatus-master && exit 1
+
+DownloadStatus(){
+	wget --no-check-certificate -qO "https://github.com/woniuzfb/doubi/archive/master.zip"
+	[ ! -e "./master.zip" ] && echo -e "$error SSRStatus 网页文件下载失败 !" && exit 1
+	unzip "./master.zip" && rm -rf "./master.zip"
+	[ ! -e "./doubi-master" ] && echo -e "$error SSRStatus 网页文件解压失败 !" && exit 1
+	mv "./doubi-master/web/SSRStatus" "$SSRSTATUS_ROOT/"
+	[ ! -e "$SSRSTATUS_PATH" ] && echo -e "$error SSRStatus 网页文件文件夹重命名失败 !" && exit 1
 }
-Install_Web(){
-	[[ -e "${Web_file}" ]] && echo -e "${Error} 检测到 SSRStatus 网页文件已安装 !" && exit 1
-	check_sys
-	echo -e "${Info} 开始安装/配置 依赖..."
-	Installation_dependency
-	echo -e "${Info} 开始部署HTTP服务(Caddy)..."
-	Install_caddy
-	echo -e "${Info} 开始下载/安装..."
-	Download_SSRStatus
-	echo -e "${Info} 开始配置定时任务..."
-	Set_crontab
-	echo -e "${Info} 所有步骤 安装完毕... 请打开本脚本并修改开头的 SSR_folder 变量引号内的ShadowsocksR子目录绝对路径，方可使用。"
+
+InstallStatus(){
+	[ -d "$SSRSTATUS_PATH" ] && echo -e "$error 检测到 SSRStatus 网页文件已安装 !" && exit 1
+	echo -e "$info 开始配置 依赖..."
+	CheckRelease
+	ChangeDate
+	UpdateCron
+	echo -e "$info 开始部署HTTP服务(Caddy)..."
+	InstallCaddy
+	echo -e "$info 开始下载/安装..."
+	DownloadStatus
+	echo -e "$info 开始配置定时任务..."
+	CrontabMenu
+	echo -e "$info 所有步骤 安装完毕... 请打开本脚本并修改开头的 SSR_PATH 变量引号内的ShadowsocksR目录，方可使用。"
 }
-Uninstall_Web(){
-	check_installed_server_status
+
+UninstallStatus(){
+	[ ! -d "$SSRSTATUS_PATH" ] && echo -e "$error SSRStatus 网页文件没有安装，请检查 !" && exit 1
 	echo "确定要卸载 SSRStatus 网页文件(自动部署的Caddy并不会删除) ? [y/N]"
 	echo
-	read -e -p "(默认: n):" unyn
-	[[ -z ${unyn} ]] && unyn="n"
-	if [[ ${unyn} == [Yy] ]]; then
+	read -p "(默认: 否):" uninstall_status_yn
+	[ -z "$uninstall_status_yn" ] && uninstall_status_yn="n"
+	if [[ "$uninstall_status_yn" == [Yy] ]]; then
 		/etc/init.d/caddy stop
-		Del_Crontab
-		rm -rf "${Web_file}"
+		DelCrontab
+		rm -rf "$SSRSTATUS_PATH"
 		echo && echo "SSRStatus 网页文件卸载完成 !" && echo
 	else
 		echo && echo "卸载已取消..." && echo
 	fi
 }
-Add_Crontab(){
-	crontab -l > "$file/crontab.bak"
-	sed -i "/ssrstatus.sh/d" "$file/crontab.bak"
-	echo -e "\n${Crontab_time} /bin/bash $file/ssrstatus.sh t" >> "$file/crontab.bak"
-	crontab "$file/crontab.bak"
-	rm -r "$file/crontab.bak"
-	cron_config=$(crontab -l | grep "ssrstatus.sh")
-	if [[ -z ${cron_config} ]]; then
-		echo -e "${Error} 添加 Crontab 定时任务失败 !" && exit 1
-	else
-		echo -e "${Info} 添加 Crontab 定时任务成功 !"
-	fi
+
+UpdateShell(){
+	sh_new_ver=$(wget --no-check-certificate -qO- -t1 -T3 "https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrstatus.sh"|grep 'sh_ver="'|awk -F "=" '{print $NF}'|sed 's/\"//g'|head -1)
+	[ -z "$sh_new_ver" ] && echo -e "$error 无法链接到 Github !" && exit 1
+	wget --no-check-certificate -qO "$SH_FILE" "https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrstatus.sh" && chmod +x "$SH_FILE"
+	echo -e "脚本已更新为最新版本[ $sh_new_ver ] !(输入: ssrs 使用)" && exit 0
 }
-Del_Crontab(){
-	crontab -l > "$file/crontab.bak"
-	sed -i "/ssrstatus.sh/d" "$file/crontab.bak"
-	crontab "$file/crontab.bak"
-	rm -r "$file/crontab.bak"
-	cron_config=$(crontab -l | grep "ssrstatus.sh")
-	if [[ ! -z ${cron_config} ]]; then
-		echo -e "${Error} 删除 Crontab 定时任务失败 !" && exit 1
-	else
-		echo -e "${Info} 删除 Crontab 定时任务成功 !"
-	fi
+
+Menu(){
+	[ -e "$SH_FILE" ] && wget --no-check-certificate -qO "$SH_FILE" "https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrstatus.sh" && chmod +x "$SH_FILE"
+	echo && echo -e "  SSRStatus 一键安装管理脚本 ${red}[v${sh_ver}]$plain
+	-- Toyo | doub.io/shell-jc5 | rewriting by MTimer --
+	
+	${green}0.$plain 升级脚本
+	————————————
+	${green}1.$plain 安装 依赖及Web网页
+	${green}2.$plain 卸载 依赖及Web网页
+	————————————
+	${green}3.$plain 测试 所有账号
+	${green}4.$plain 测试 单独账号
+	${green}5.$plain 测试 自定义账号
+	————————————
+	${green}6.$plain 设置 账号
+	${green}7.$plain 查看 账号
+	${green}8.$plain 查看 日志
+	${green}9.$plain 设置 计划任务
+	————————————" && echo
+	[ -d "$SSRSTATUS_PATH" ] && echo -e " 当前状态: Web网页 $green已安装$plain" || echo -e " 当前状态: Web网页 $red未安装$plain"
+	echo
+	read -p " 请输入数字 [0-9]:" choose
+	case "$choose" in
+		0)
+		UpdateShell
+		;;
+		1)
+		InstallStatus
+		;;
+		2)
+		UninstallStatus
+		;;
+		3)
+		TestAllAccs
+		;;
+		4)
+		TestOneAccMenu
+		;;
+		5)
+		TestNewAcc
+		;;
+		6)
+		ConfigAccMenu
+		;;
+		7)
+		ListAccs
+		;;
+		8)
+		ViewStatusLog
+		;;
+		9)
+		CrontabMenu
+		;;
+		*)
+		echo "请输入正确数字 [0-9]"
+		;;
+	esac
 }
-Update_Shell(){
-	sh_new_ver=$(wget --no-check-certificate -qO- -t1 -T3 "https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrstatus.sh"|grep 'sh_ver="'|awk -F "=" '{print $NF}'|sed 's/\"//g'|head -1) && sh_new_type="github"
-	[[ -z ${sh_new_ver} ]] && echo -e "${Error} 无法链接到 Github !" && exit 0
-	wget -N --no-check-certificate "https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrstatus.sh" && chmod +x ssrstatus.sh
-	echo -e "脚本已更新为最新版本[ ${sh_new_ver} ] !(注意：因为更新方式为直接覆盖当前运行的脚本，所以可能下面会提示一些报错，无视即可)" && exit 0
-}
-menu(){
-echo && echo -e "  SSRStatus 一键安装管理脚本 ${Red_font_prefix}[v${sh_ver}]${Font_color_suffix}
-  -- Toyo | doub.io/shell-jc5 --
-  
- ${Green_font_prefix}0.${Font_color_suffix} 升级脚本
- ————————————
- ${Green_font_prefix}1.${Font_color_suffix} 安装 依赖及Web网页
- ${Green_font_prefix}2.${Font_color_suffix} 卸载 依赖及Web网页
-————————————
- ${Green_font_prefix}3.${Font_color_suffix} 测试 所有账号
- ${Green_font_prefix}4.${Font_color_suffix} 测试 单独账号
- ${Green_font_prefix}5.${Font_color_suffix} 测试 自定义账号
-————————————
- ${Green_font_prefix}6.${Font_color_suffix} 设置 配置信息
- ${Green_font_prefix}7.${Font_color_suffix} 查看 配置信息
- ${Green_font_prefix}8.${Font_color_suffix} 查看 运行日志
- ${Green_font_prefix}9.${Font_color_suffix} 设置 定时间隔
-————————————" && echo
-if [[ -e ${Web_file} ]]; then
-	echo -e " 当前状态: Web网页 ${Green_font_prefix}已安装${Font_color_suffix}"
-else
-	echo -e " 当前状态: Web网页 ${Red_font_prefix}未安装${Font_color_suffix}"
-fi
-echo
-read -e -p " 请输入数字 [0-9]:" num
-case "$num" in
-	0)
-	Update_Shell
+
+action=$1
+case "$action" in
+	t) TestAllAccs
 	;;
-	1)
-	Install_Web
+	o) TestOneAccMenu
 	;;
-	2)
-	Uninstall_Web
+	a) TestNewAcc
 	;;
-	3)
-	Test
+	log) ViewStatusLog
 	;;
-	4)
-	Test_one
-	;;
-	5)
-	Test_add
-	;;
-	6)
-	Set_SSRStatus
-	;;
-	7)
-	List_SSRStatus
-	;;
-	8)
-	View_log
-	;;
-	9)
-	Set_crontab
-	;;
-	*)
-	echo "请输入正确数字 [0-9]"
+	*) Menu
 	;;
 esac
-}
-action=$1
-if [[ ${1} == "t" ]]; then
-	Test
-elif [[ ${1} == "a" ]]; then
-	Test_add
-elif [[ ${1} == "o" ]]; then
-	Test_one
-elif [[ ${1} == "log" ]]; then
-	View_log
-else
-	menu
-fi
