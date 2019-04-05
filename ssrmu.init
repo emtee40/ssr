@@ -1,0 +1,86 @@
+#!/bin/bash
+# chkconfig: 2345 90 10
+# Description: Startup script for ShadowsocksR. Place in /etc/init.d and
+# run 'update-rc.d -f ssrmu defaults'
+# For CentOS/Redhat run: chkconfig --add ssrmu	#加入开机启动选项中 
+# run: chkconfig ssrmu on 设置开机自动启动
+# run: service ssrmu start 启动 ssrmu 服务
+
+### BEGIN INIT INFO
+# Provides:				ShadowsocksR
+# Required-Start:		$all
+# Required-Stop:		$all
+# Default-Start:		2 3 4 5
+# Default-Stop:			0 1 6
+# Short-Description:	ShadowsocksR mudbjson server
+# Description:			start/stop ShadowsocksR mudbjson server
+### END INIT INFO
+
+ssr_name="ShadowsocksR"
+SSR_PATH="/usr/local/shadowsocksr"
+SERVER_FILE="$SSR_PATH/server.py"
+info="\033[32m" && error="\033[31m" && plain="\033[0m"
+RETVAL=0
+
+GetPid(){
+	ssr_pid=$(pgrep -f server.py)
+}
+
+do_start(){
+	GetPid
+	if [ -n "$ssr_pid" ]; then
+		echo -e "${info}[信息]$plain $ssr_name (PID $ssr_pid) 正在运行..."
+	else
+		ulimit -n 512000
+		nohup python "$SERVER_FILE" a >> "$SSR_PATH/ssserver.log" 2>&1 &
+		sleep 2s
+		GetPid
+		if [ -n "$ssr_pid" ]; then
+			echo -e "${info}[信息]$plain $ssr_name 启动成功 !"
+		else
+			echo -e "${error}[错误]$plain $ssr_name 启动失败 !"
+		fi
+	fi
+}
+
+do_stop(){
+	GetPid
+	if [ -n "$ssr_pid" ]; then
+		kill -9 "$ssr_pid"
+		RETVAL=$?
+		if [ $RETVAL -eq 0 ]; then
+			echo -e "${info}[信息]$plain $ssr_name 停止成功 !"
+		else
+			echo -e "${error}[错误]$plain $ssr_name 停止失败 !"
+		fi
+	else
+		echo -e "${info}[信息]$plain $ssr_name 未运行 !"
+		RETVAL=1
+	fi
+}
+
+do_status(){
+	GetPid
+	if [ -n "$ssr_pid" ]; then
+		echo -e "${info}[信息]$plain $ssr_name (PID $ssr_pid) 正在运行..."
+	else
+		echo -e "${info}[信息]$plain $ssr_name 未运行 !"
+		RETVAL=1
+	fi
+}
+
+do_restart(){
+	do_stop
+	do_start
+}
+
+case "$1" in
+	start|stop|restart|status)
+	do_"$1"
+	;;
+	*)
+	echo "使用方法: $0 { start | stop | restart | status }"
+	RETVAL=1
+	;;
+esac
+exit $RETVAL
