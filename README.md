@@ -1,10 +1,10 @@
-# 重写中
+# 重写中，勿用
 
 ---
 
 ## ssrmu.sh
 
-- 默认协议和加密不同
+- 重写中
 
 ``` bash
 wget -N --no-check-certificate https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrmu.sh && chmod +x ssrmu.sh && bash ssrmu.sh
@@ -14,8 +14,7 @@ wget -N --no-check-certificate https://raw.githubusercontent.com/woniuzfb/doubi/
 
 ## ssrstatus.sh
 
-- 错误修复
-- 重写
+- 重写中
 
 ``` bash
 wget -N --no-check-certificate https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrstatus.sh && chmod +x ssrstatus.sh && bash ssrstatus.sh

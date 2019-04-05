@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+set -euo pipefail
+
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 export PATH
 
@@ -10,11 +12,13 @@ export PATH
 #	Rewriter: MTimer
 #=================================================
 
-set -euo pipefail
-
 sh_ver="1.0.9"
 SSR_PATH="/usr/local/shadowsocksr"
-[ -d "/var/www" ] && SSRSTATUS_ROOT="/var/www" || SSRSTATUS_ROOT="/usr/local"
+if [ -d "/var/www" ]; then
+	SSRSTATUS_ROOT="/var/www"
+else
+	SSRSTATUS_ROOT="/usr/local"
+fi
 SSRSTATUS_PATH="$SSRSTATUS_ROOT/SSRStatus"
 LOG_FILE="$SSR_PATH/ssr_status.log"
 CONFIG_FILE="$SSR_PATH/ssr_status.conf"
@@ -69,10 +73,10 @@ CheckRelease()
 		fi
 	done
 
-	[ ! "$(wget -V)" ] && ( echo -e "$error 依赖 wget 安装失败..." && exit 1 ) || true
-	[ ! "$(unzip -v)" ] && ( echo -e "$error 依赖 unzip 安装失败..." && exit 1 ) || true
-	[ ! "$(curl -V)" ] && ( echo -e "$error 依赖 curl 安装失败..." && exit 1 ) || true
-	[ ! "$(ls /usr/sbin/cron*)" ] && ( echo -e "$error 依赖 cron 安装失败..." && exit 1) || true
+	[ ! "$(wget -V)" ] && echo -e "$error 依赖 wget 安装失败..." && exit 1
+	[ ! "$(unzip -v)" ] && echo -e "$error 依赖 unzip 安装失败..." && exit 1
+	[ ! "$(curl -V)" ] && echo -e "$error 依赖 curl 安装失败..." && exit 1
+	[ ! "$(ls /usr/sbin/cron*)" ] && echo -e "$error 依赖 cron 安装失败..." && exit 1
 }
 
 GetServerIp(){
@@ -162,7 +166,8 @@ SetAccProtocol(){
  ${green}2.$plain auth_sha1_v4
  ${green}3.$plain auth_aes128_md5
  ${green}4.$plain auth_aes128_sha1
- ${green}5.$plain auth_chain_a" && echo
+ ${green}5.$plain auth_chain_a
+ ${green}6.$plain auth_chain_b" && echo
 	read -p "(默认: 4. auth_aes128_sha1):" p_number
 	protocols=(
 		origin 
@@ -170,6 +175,7 @@ SetAccProtocol(){
 		auth_aes128_md5 
 		auth_aes128_sha1 
 		auth_chain_a
+		auth_chain_b
 	)
 	protocol=${protocols["$p_number" - 1]}
 	[ -z "$protocol" ] && protocol=${protocols[3]}
@@ -232,7 +238,8 @@ DecAccLink(){
 		passwd=$(echo "$passwd_base64"|base64 --decode)
 		acc_info_b=$(echo "$acc_info"|awk -F "/?" '{print $2}')
 		acc_info_c=$(echo "$acc_info_b"|awk -F "group=" '{print $2}')
-		acc_group=$(echo "$acc_info_c"|awk -F "=" '{print $1}')
+		group_base64=$(echo "$acc_info_c"|awk -F "=" '{print $1}')
+		acc_group=$(echo "$group_base64"|base64 --decode)
 	fi
 	[ -z "$acc_group" ] && acc_group="未分组"
 	echo && echo -e "	链接 : $red$acc_link$plain" && echo
@@ -350,9 +357,9 @@ ConfigAccStatus(){
 	esac
 
 	if [ "$(sed -i "${config_status_num} c\\${acc}" "$CONFIG_FILE")" ]; then
-		echo -e "$info 修改成功 ! [账号状态为: ${green}${acc_status_new}${plain}]"
+		echo -e "$info 修改成功 ! [账号状态为: $green$acc_status_new$plain]"
 	else
-		echo -e "$error 修改失败 ! [账号状态为: ${red}${acc_status_old}${plain}]"
+		echo -e "$error 修改失败 ! [账号状态为: $red$acc_status_old$plain]"
 	fi
 }
 
@@ -360,9 +367,9 @@ AddAccMenu(){
 	echo -e "请选择输入方式
  ${green}1.$plain 输入ShadowsocksR账号全部信息(Shadowsocks原版也可以)
  ${green}2.$plain 输入ShadowsocksR账号的 SSR链接(Shadowsocks原版也可以)"
-	read -p "(默认:2):" add_acc_type
-	[ -z "$add_acc_type" ] && add_acc_type="2"
-	if [ "$add_acc_type" == "1" ]; then
+	read -p "(默认:2):" add_acc_num
+	[ -z "$add_acc_num" ] && add_acc_num="2"
+	if [ "$add_acc_num" == "1" ]; then
 		echo "下面依次开始输入要检测的 ShadowsocksR账号信息。" && echo
 		SetAccIp
 		SetAccPort
@@ -385,7 +392,8 @@ AddAccMenu(){
 		acc_link="ss://"$(echo -n "$method:$passwd@$acc_ip:$acc_port"|base64 -w0 |sed 's/=//g;s/\//_/g;s/+/-/g')
 	else
 		passwd_base64=$(echo -n "$passwd"|base64 -w0 |sed 's/=//g;s/\//_/g;s/+/-/g')
-		acc_link="ssr://"$(echo -n "$acc_ip:$acc_port:$protocol:$method:$obfs:$passwd_base64/?group=$acc_group"|base64 -w0 |sed 's/=//g;s/\//_/g;s/+/-/g')
+		group_base64=$(echo -n "$acc_group"|base64 -w0 |sed 's/=//g;s/\//_/g;s/+/-/g')
+		acc_link="ssr://"$(echo -n "$acc_ip:$acc_port:$protocol:$method:$obfs:$passwd_base64/?group=$group_base64"|base64 -w0 |sed 's/=//g;s/\//_/g;s/+/-/g')
 	fi
 	acc="$acc_link###$acc_group###$acc_public###enbaled"
 }
@@ -399,16 +407,16 @@ ConfigAccMenu(){
 ————————
  $green 4.$plain 启用/禁用 账号配置
  注意：添加/修改/删除 账号配置后，不会立即更新，需要自动(定时)/手动检测一次所有账号，网页才会更新 !" && echo
-	read -p "(默认: 取消):" config_acc_type
-	[ -z "$config_acc_type" ] && echo "已取消..." && exit 1
-	if [ "$config_acc_type" == "1" ]; then
+	read -p "(默认: 取消):" config_acc_num
+	[ -z "$config_acc_num" ] && echo "已取消..." && exit 1
+	if [ "$config_acc_num" == "1" ]; then
 		AddAccMenu
 		AddAcc
-	elif [ "$config_acc_type" == "2" ]; then
+	elif [ "$config_acc_num" == "2" ]; then
 		DelAcc
-	elif [ "$config_acc_type" == "3" ]; then
+	elif [ "$config_acc_num" == "3" ]; then
 		ConfigAcc
-	elif [ "$config_acc_type" == "4" ]; then
+	elif [ "$config_acc_num" == "4" ]; then
 		ConfigAccStatus
 	else
 		echo -e "$error 请输入正确的数字[1-4]" && exit 1
@@ -462,9 +470,13 @@ UpdateJson(){
 }
 
 RandPort(){
-	min=1000
-	rand_port=$(date +%s)
-	rand_port=$("$rand_port"%$min+$min)
+    read lowerport upperport < /proc/sys/net/ipv4/ip_local_port_range
+    while :
+    do
+            rand_port=$(shuf -i "$lowerport"-"$upperport" -n 1)
+            ss -lpn | grep -q ":$rand_port " || break
+    done
+    # OR rand_port=$(python -c 'import socket; s=socket.socket(); s.bind(("", 0)); print(s.getsockname()[1]); s.close()');
 }
 
 ValidIP(){
@@ -490,7 +502,7 @@ TestOneAcc(){
 	if [ "$acc_type" == "ss" ]; then
 		echo -e "$method:$passwd@$acc_ip:$acc_port"
 	else
-		echo -e "$acc_ip:$acc_port:$protocol:$method:$obfs:$passwd_base64/?group=$acc_group"	
+		echo -e "$acc_ip:$acc_port:$protocol:$method:$obfs:$passwd_base64/?group=$group_base64"	
 	fi
 
 	if [ -z "$acc_ip" ] || [ -z "$acc_port" ] || [ -z "$method" ] || [ -z "$passwd" ] || [ -z "$protocol" ] || [ -z "$obfs" ]; then
@@ -743,8 +755,8 @@ UpdateShell(){
 
 Menu(){
 	[ -e "$SH_FILE" ] && wget --no-check-certificate -qO "$SH_FILE" "https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrstatus.sh" && chmod +x "$SH_FILE"
-	echo && echo -e "  SSRStatus 一键安装管理脚本 ${red}[v${sh_ver}]$plain
-	-- Toyo | doub.io/shell-jc5 | rewriting by MTimer --
+	echo && echo -e "  SSRStatus 一键安装管理脚本 ${red}[v$sh_ver]$plain
+	-- Toyo | rewriting by MTimer --
 	
 	${green}0.$plain 升级脚本
 	————————————
