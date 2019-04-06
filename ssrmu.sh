@@ -187,7 +187,7 @@ InstallJq(){
 		#experimental# grep -Po '"tag_name": "jq-\K.*?(?=")'
 		jq_ver=$(curl --silent -m 10 "https://api.github.com/repos/stedolan/jq/releases/latest" |  grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' || true)
 		if [ -n "$jq_ver" ]; then
-			wget --no-check-certificate "https://github.com/stedolan/jq/releases/download/jq-$jq_ver/jq-linux$release_bit" -qO "$JQ_FILE"
+			wget --no-check-certificate "https://github.com/stedolan/jq/releases/download/$jq_ver/jq-linux$release_bit" -qO "$JQ_FILE"
 		else
 			mv "$SSR_PATH/jq-linux$release_bit" "$JQ_FILE"
 		fi
