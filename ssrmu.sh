@@ -556,7 +556,7 @@ SetAccForbid(){
 封禁多个端口格式: 23,465
 封禁  端口段格式: 233-266
 封禁多种格式端口: 25,465,233-666 (不带冒号:)"
-    read -p "(默认为空 不禁止访问任何端口):" forbid
+    read -p "(默认为空 不禁止访问任何端口):" acc_forbidden_port
     [ -z "$acc_forbidden_port" ] && acc_forbidden_port_text="无" || acc_forbidden_port_text="$acc_forbidden_port"
     echo && echo "$separator" && echo -e "	禁止的端口 : $green$acc_forbidden_port_text$plain" && echo "$separator" && echo
 }
@@ -722,6 +722,7 @@ AddAcc(){
     SetAccSpeedUser
     SetAccTransfer
     SetAccForbid
+    limit_option=""
     [ -n "$acc_speed_con" ] && limit_option="-s $acc_speed_con"
     [ -n "$acc_speed_user" ] && limit_option="$limit_option -S $acc_speed_user"
     [ -n "$acc_forbidden_port" ] && limit_option="$limit_option -f $acc_forbidden_port"
