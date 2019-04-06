@@ -121,7 +121,7 @@ InstallSsr(){
     echo -e "$info 开始下载/安装 ShadowsocksR文件..."
     wget --no-check-certificate "https://github.com/woniuzfb/shadowsocksr/archive/manyuser.zip" -qO manyuser.zip
     [ ! -e "./manyuser.zip" ] && echo -e "$error ShadowsocksR服务端 压缩包 下载失败 !" && exit 1
-    unzip "./manyuser.zip" && rm -rf "./manyuser.zip"
+    unzip "./manyuser.zip" >/dev/null 2>&1 && rm -rf "./manyuser.zip"
     [ ! -e "./shadowsocksr-manyuser/" ] && echo -e "$error ShadowsocksR服务端 解压失败 !" && exit 1
     mv "./shadowsocksr-manyuser" "$SSR_PATH"
     [ ! -d "$SSR_PATH" ] && echo -e "$error 移动 ShadowsocksR服务端 失败 !" && exit 1
@@ -157,7 +157,7 @@ InstallSsr(){
 UninstallSsr(){
     [ ! -e "$SSR_PATH" ] && echo -e "$error 没有安装 ShadowsocksR，请检查 !" && exit 1
     CheckRelease
-    echo "确定要 卸载ShadowsocksR？[y/N]" && echo
+    echo "确定要 卸载ShadowsocksR？[Y/n]" && echo
     read -p "(默认: n):" uninstall_ssr_yn
     [ -z "$uninstall_ssr_yn" ] && uninstall_ssr_yn="n"
     if [[ "$uninstall_ssr_yn" == [Yy] ]]; then
