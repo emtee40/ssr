@@ -690,7 +690,6 @@ GetAccInfo(){
 }
 
 ViewAccInfo(){
-    [ -z "$server_name" ] && server_name=$(< "$USER_API_CONFIG_FILE" grep "SERVER_PUB_ADDR = "|awk -F "[']" '{print $2}')
     clear && echo "===================================================" && echo
     echo -e " 用户 [$acc_user] 的配置信息：" && echo
     echo -e " 地址\t    : $green$server_name$plain"
@@ -755,6 +754,7 @@ AddAccAgain(){
 }
 
 SsSsrLink(){
+    [ -z "$server_name" ] && server_name=$(< "$USER_API_CONFIG_FILE" grep "SERVER_PUB_ADDR = "|awk -F "[']" '{print $2}')
     ss_link=""
     if [ "$acc_protocol" == "origin" ] || [ "$acc_protocol" == "auth_sha1_v4_compatible" ]; then
         if [ "$acc_obfs" == "plain" ] || echo "$acc_obfs" | grep -q "_compatible"; then
