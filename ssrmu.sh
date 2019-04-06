@@ -906,7 +906,7 @@ ViewConnection(){
     else
         GetAccsInfo
         accs_list=""
-        acc_ip_count=0
+        accs_ip_count=0
         for((index=0;index<accs_count;index++)); do
             acc_user="${accs_port[index]}"
             acc_port="${accs_port[index]}"
