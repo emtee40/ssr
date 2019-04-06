@@ -543,7 +543,7 @@ SetAccTransfer(){
     if [ "$acc_transfer" == "838868" ]; then
         acc_transfer_text="无限"
     else
-        acc_transfer_enable=$(numfmt --from=iec "$acc_d_byte"G)
+        acc_transfer_enable=$(numfmt --from=iec "$acc_transfer"G)
         acc_transfer_text=$(numfmt --to=iec "$acc_transfer_enable")
     fi
     echo && echo "$separator" && echo -e "	用户总限速 : $green$acc_transfer_text$plain" && echo "$separator" && echo
@@ -557,8 +557,8 @@ SetAccForbid(){
 封禁  端口段格式: 233-266
 封禁多种格式端口: 25,465,233-666 (不带冒号:)"
     read -p "(默认为空 不禁止访问任何端口):" forbid
-    [ -z "$forbid" ] && forbid_text="无" || forbid_text="$forbid"
-    echo && echo "$separator" && echo -e "	禁止的端口 : $green$forbid_text$plain" && echo "$separator" && echo
+    [ -z "$acc_forbidden_port" ] && acc_forbidden_port_text="无" || acc_forbidden_port_text="$acc_forbidden_port"
+    echo && echo "$separator" && echo -e "	禁止的端口 : $green$acc_forbidden_port_text$plain" && echo "$separator" && echo
 }
 
 AddIptables(){
@@ -699,7 +699,7 @@ ViewAccInfo(){
     echo -e " 设备数限制 : $green$acc_protocol_param$plain"
     echo -e " 单线程限速 : $green$acc_speed_con_text$plain"
     echo -e " 用户总限速 : $green$acc_speed_user_text$plain"
-    echo -e " 禁止的端口 : $green$acc_port$plain"
+    echo -e " 禁止的端口 : $green$acc_forbidden_port_text$plain"
     echo
     echo -e " 已使用流量 : 上传: $green$acc_u_text$plain + 下载: $green$acc_d_text$plain = $green$acc_transfer_used_text$plain"
     echo -e " 剩余的流量 : $green$acc_transfer_left_text$plain"
