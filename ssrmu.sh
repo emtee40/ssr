@@ -1181,6 +1181,7 @@ ConfigServerName(){
 }
 
 ConfigAccMenu(){
+    CheckRelease
     echo && echo -e "你要做什么？
   ${green}1.$plain 添加 用户账号
   ${green}2.$plain 删除 用户账号
@@ -1320,6 +1321,7 @@ ClearTransferAllCronModify(){
 }
 
 ClearTransferMenu(){
+    CheckRelease
     echo && echo -e "你要做什么？
  ${green}1.$plain  清零 单个用户已使用流量
  ${green}2.$plain  清零 所有用户已使用流量(不可挽回)
