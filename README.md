@@ -1,10 +1,12 @@
-# 重写中，勿用
+# 自用ShadowsockR一键管理脚本，使用方法：<kbd>Enter</kbd>
 
 ---
 
 ## ssrmu.sh
 
-- 重写中
+- 重写 √
+- 修复 .
+- 扩展 ...
 
 ``` bash
 wget -N --no-check-certificate https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrmu.sh && chmod +x ssrmu.sh && bash ssrmu.sh
@@ -14,7 +16,9 @@ wget -N --no-check-certificate https://raw.githubusercontent.com/woniuzfb/doubi/
 
 ## ssrstatus.sh
 
-- 重写中
+- 重写 √
+- 修复 .
+- 扩展 ...
 
 ``` bash
 wget -N --no-check-certificate https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrstatus.sh && chmod +x ssrstatus.sh && bash ssrstatus.sh
