@@ -136,22 +136,22 @@ InstallSsr(){
 	echo -e "$info ShadowsocksR服务端 下载完成 !"
 
 	if wget --no-check-certificate https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrmu.init -qO /etc/init.d/ssrmu; then
-        chmod +x /etc/init.d/ssrmu
-        case "$release" in
-            "rpm")
-                chkconfig --add ssrmu
-                chkconfig ssrmu on
-            ;;
-            "deb"|"ubu")
-                update-rc.d -f ssrmu defaults
-            ;;
-            *) echo -e "$error 系统不支持 !" && exit 1
-            ;;
-        esac
-        echo -e "$info ShadowsocksR服务 管理脚本下载完成 !"
-    else
-        echo -e "$error ShadowsocksR服务 管理脚本下载失败 !" && exit 1
-    fi
+		chmod +x /etc/init.d/ssrmu
+		case "$release" in
+			"rpm")
+				chkconfig --add ssrmu
+				chkconfig ssrmu on
+			;;
+			 "deb"|"ubu")
+				update-rc.d -f ssrmu defaults
+			;;
+			*) echo -e "$error 系统不支持 !" && exit 1
+			;;
+		esac
+		echo -e "$info ShadowsocksR服务 管理脚本下载完成 !"
+	else
+		echo -e "$error ShadowsocksR服务 管理脚本下载失败 !" && exit 1
+	fi
 }
 
 UninstallSsr(){
@@ -200,11 +200,11 @@ InstallJq(){
 }
 
 GetServerIp(){
-    server_ip=$( ip addr | grep -E -o '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | grep -E -v "^192\.168|^172\.1[6-9]\.|^172\.2[0-9]\.|^172\.3[0-2]\.|^10\.|^127\.|^255\.|^0\." | head -n 1 )
-    [ -z "$server_ip" ] && server_ip="$(wget -qO- -t1 -T2 ipv4.icanhazip.com)"
-    [ -z "$server_ip" ] && server_ip="$(wget -qO- -t1 -T2 ipinfo.io/ip)"
-	[ -z "$server_ip" ] && server_ip="$(wget -qO- -t1 -T2 api.ip.sb/ip)"
-    [ -z "$server_ip" ] && echo "无法获取本机IP，请手动输入" && exit 1
+	server_ip=$( ip addr | grep -E -o '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | grep -E -v "^192\.168|^172\.1[6-9]\.|^172\.2[0-9]\.|^172\.3[0-2]\.|^10\.|^127\.|^255\.|^0\." | head -n 1 )
+	[ -z "$server_ip" ] && server_ip=$(wget -qO- -t1 -T2 ipv4.icanhazip.com)
+	[ -z "$server_ip" ] && server_ip=$(wget -qO- -t1 -T2 ipinfo.io/ip)
+	[ -z "$server_ip" ] && server_ip=$(wget -qO- -t1 -T2 api.ip.sb/ip)
+	[ -z "$server_ip" ] && echo "无法获取本机IP，请手动输入" && exit 1
 }
 
 SetServerName(){
@@ -258,12 +258,12 @@ SetAccUser(){
 }
 
 GetFreePort(){
-    read lowerport upperport < /proc/sys/net/ipv4/ip_local_port_range
-    while :;do
-            acc_port=$(shuf -i "$lowerport"-"$upperport" -n 1)
-            ss -lpn | grep -q ":$acc_port " || break
-    done
-    # OR acc_port=$(python -c 'import socket; s=socket.socket(); s.bind(("", 0)); print(s.getsockname()[1]); s.close()');
+	read lowerport upperport < /proc/sys/net/ipv4/ip_local_port_range
+	while :;do
+		acc_port=$(shuf -i "$lowerport"-"$upperport" -n 1)
+		ss -lpn | grep -q ":$acc_port " || break
+	done
+	# OR acc_port=$(python -c 'import socket; s=socket.socket(); s.bind(("", 0)); print(s.getsockname()[1]); s.close()');
 }
 
 SetAccPort(){
@@ -381,10 +381,10 @@ SetAccProtocol(){
 	acc_protocol=${protocol_array["$protocol_number" - 1]}
 	[ -z "$acc_protocol" ] && acc_protocol=${protocol_array[3]}
 	if [ "$acc_protocol" == "auth_sha1_v4" ]; then
-        read -p "是否设置 协议插件兼容原版(_compatible)？[Y/n 默认否]" protocol_yn
-        [ -z "$protocol_yn" ] && protocol_yn="n"
-        [[ $protocol_yn == [Yy] ]] && acc_protocol=$acc_protocol"_compatible"
-        echo
+		read -p "是否设置 协议插件兼容原版(_compatible)？[Y/n 默认否]" protocol_yn
+		[ -z "$protocol_yn" ] && protocol_yn="n"
+		[[ $protocol_yn == [Yy] ]] && acc_protocol=$acc_protocol"_compatible"
+		echo
 	fi
 	echo && echo "$separator" && echo -e "	协议 : $green$acc_protocol$plain" && echo "$separator" && echo
 }
@@ -393,24 +393,24 @@ SetAccProtocolParam(){
 	echo -e "请输入要设置的用户 欲限制的设备数 ($green auth_* 系列协议 不兼容原版才有效 $plain)"
 	echo -e "$tip 设备数限制：每个端口同一时间能链接的客户端数量(多端口模式，每个端口都是独立计算)，建议最少 2个。"
 	while read -p "(默认: 无限):" acc_protocol_param; do
-        case "$acc_protocol_param" in
-            ("")
-                break
-            ;;
-            (*[!0-9]*)
-                echo -e "$error 请输入正确的数字(1-9999) "
-            ;;
-            (*)
-                if [ "$acc_protocol_param" -ge 1 ] && [ "$acc_protocol_param" -le 9999 ]; then
-                    break
-                else
-                    echo -e "$error 请输入正确的数字(1-9999)"
-                fi
-            ;;
-        esac
-    done
-    [ "$acc_protocol_param" == "" ] && acc_protocol_param_text="无限" || acc_protocol_param_text="$acc_protocol_param"
-    echo && echo "$separator" && echo -e "	设备数限制 : $green$acc_protocol_param_text$plain" && echo "$separator" && echo
+		case "$acc_protocol_param" in
+			("")
+				break
+			;;
+			(*[!0-9]*)
+				echo -e "$error 请输入正确的数字(1-9999) "
+			;;
+			(*)
+				if [ "$acc_protocol_param" -ge 1 ] && [ "$acc_protocol_param" -le 9999 ]; then
+					break
+				else
+					echo -e "$error 请输入正确的数字(1-9999)"
+				fi
+			;;
+		esac
+	done
+	[ "$acc_protocol_param" == "" ] && acc_protocol_param_text="无限" || acc_protocol_param_text="$acc_protocol_param"
+	echo && echo "$separator" && echo -e "	设备数限制 : $green$acc_protocol_param_text$plain" && echo "$separator" && echo
 }
 
 SetAccObfs(){
@@ -435,9 +435,9 @@ SetAccObfs(){
 	acc_obfs=${obfs_array["$obfs_number" - 1]}
 	[ -z "$acc_obfs" ] && acc_obfs=${obfs_array[4]}
 	if [ "$acc_obfs" != "plain" ]; then
-        read -p "是否设置 混淆插件兼容原版(_compatible)？[Y/n 默认否]" obfs_compa_yn
-        [ -z "$obfs_compa_yn" ] && obfs_compa_yn="n"
-        [[ "$obfs_compa_yn" == [Yy] ]] && acc_obfs=$acc_obfs"_compatible"
+		read -p "是否设置 混淆插件兼容原版(_compatible)？[Y/n 默认否]" obfs_compa_yn
+		[ -z "$obfs_compa_yn" ] && obfs_compa_yn="n"
+		[[ "$obfs_compa_yn" == [Yy] ]] && acc_obfs=$acc_obfs"_compatible"
 	fi
 	echo && echo "$separator" && echo -e "	混淆 : $green$acc_obfs$plain" && echo "$separator" && echo
 }
@@ -453,86 +453,86 @@ SetAccSpeedCon(){
 	echo -e "请输入要设置的用户 单线程 限速上限(单位：KB/S)"
 	echo -e "$tip 单线程限速：每个端口 单线程的限速上限，多线程即无效。"
 	while read -p "(默认: 无限):" acc_speed_con; do
-        case "$acc_speed_con" in
-            ("")
-                break
-            ;;
-           (*[!0-9]*)
-                echo -e "$error 请输入正确的数字(1-131072) "
-            ;;
-            (*)
-                if [ "$acc_speed_con" -ge 1 ] && [ "$acc_speed_con" -le 131072 ]; then
-                    break
-                else
-                    echo -e "$error 请输入正确的数字(1-131072)"
-                fi
-            ;;
-        esac
+		case "$acc_speed_con" in
+			("")
+				break
+			;;
+			(*[!0-9]*)
+				echo -e "$error 请输入正确的数字(1-131072) "
+			;;
+			(*)
+				if [ "$acc_speed_con" -ge 1 ] && [ "$acc_speed_con" -le 131072 ]; then
+					break
+				else
+					echo -e "$error 请输入正确的数字(1-131072)"
+				fi
+			;;
+		esac
 	done
-    if [ -z "$acc_speed_con" ]; then
+	if [ -z "$acc_speed_con" ]; then
 		acc_speed_con_text="无限"
 	else
 		acc_speed_con_byte=$(numfmt --from=iec "$acc_speed_con"K)
 		acc_speed_con_text=$(numfmt --to=iec --suffix=B "$acc_speed_con_byte")"/s"
 	fi
-    echo && echo "$separator" && echo -e "	单线程限速 : $green$acc_speed_con_text$plain" && echo "$separator" && echo
+	echo && echo "$separator" && echo -e "	单线程限速 : $green$acc_speed_con_text$plain" && echo "$separator" && echo
 }
 
 SetAccSpeedUser(){
 	echo -e "请输入要设置的用户 总速度 限速上限(单位：KB/S)"
 	echo -e "$tip 端口总限速：每个端口 总速度 限速上限，单个端口整体限速。"
 	while read -p "(默认: 无限):" acc_speed_user; do
-        case "$acc_speed_user" in
-            ("")
-                break
-            ;;
-           (*[!0-9]*)
-                echo -e "$error 请输入正确的数字(1-131072) "
-            ;;
-            (*)
-                if [ "$acc_speed_user" -ge 1 ] && [ "$acc_speed_user" -le 131072 ]; then
-                    break
-                else
-                    echo -e "$error 请输入正确的数字(1-131072)"
-                fi
-            ;;
-        esac
+		case "$acc_speed_user" in
+			("")
+				break
+			;;
+			(*[!0-9]*)
+				echo -e "$error 请输入正确的数字(1-131072) "
+			;;
+			(*)
+				if [ "$acc_speed_user" -ge 1 ] && [ "$acc_speed_user" -le 131072 ]; then
+					break
+				else
+					echo -e "$error 请输入正确的数字(1-131072)"
+				fi
+			;;
+		esac
 	done
-    if [ -z "$acc_speed_user" ]; then
+	if [ -z "$acc_speed_user" ]; then
 		acc_speed_user_text="无限"
 	else
 		acc_speed_user_byte=$(numfmt --from=iec "$acc_speed_user"K)
 		acc_speed_user_text=$(numfmt --to=iec --suffix=B "$acc_speed_user_byte")"/s"
 	fi
-    echo && echo "$separator" && echo -e "	用户总限速 : $green$acc_speed_user_text$plain" && echo "$separator" && echo
+	echo && echo "$separator" && echo -e "	用户总限速 : $green$acc_speed_user_text$plain" && echo "$separator" && echo
 }
 
 SetAccTransfer(){
 	echo -e "请输入要设置的用户 可使用的总流量上限(单位: GB, 1-838868 GB)"
 	while read -p "(默认: 1000G):" acc_transfer; do
-        case "$acc_transfer" in
-            ("")
-                acc_transfer="1000" && echo && break
-            ;;
-           (*[!0-9]*)
-                echo -e "$error 请输入正确的数字(1-838868) "
-            ;;
-            (*)
-                if [ "$acc_transfer" -ge 1 ] && [ "$acc_transfer" -le 838868 ]; then
-                    break
-                else
-                    echo -e "$error 请输入正确的数字(1-838868)"
-                fi
-            ;;
-        esac
+		case "$acc_transfer" in
+			("")
+				acc_transfer="1000" && echo && break
+			;;
+			(*[!0-9]*)
+				echo -e "$error 请输入正确的数字(1-838868) "
+			;;
+			(*)
+				if [ "$acc_transfer" -ge 1 ] && [ "$acc_transfer" -le 838868 ]; then
+					break
+				else
+					echo -e "$error 请输入正确的数字(1-838868)"
+				fi
+			;;
+		esac
 	done
-    if [ "$acc_transfer" == "838868" ]; then
+	if [ "$acc_transfer" == "838868" ]; then
 		acc_transfer_text="无限"
 	else
 		acc_transfer_enable=$(numfmt --from=iec "$acc_d_byte"G)
 		acc_transfer_text=$(numfmt --to=iec "$acc_transfer_enable")
 	fi
-    echo && echo "$separator" && echo -e "	用户总限速 : $green$acc_transfer_text$plain" && echo "$separator" && echo
+	echo && echo "$separator" && echo -e "	用户总限速 : $green$acc_transfer_text$plain" && echo "$separator" && echo
 }
 
 SetAccForbid(){
@@ -561,8 +561,8 @@ AddIptables(){
 		ip6tables -I INPUT -m state --state NEW -m tcp -p tcp --dport "$acc_port" -j ACCEPT
 		ip6tables -I INPUT -m state --state NEW -m udp -p udp --dport "$acc_port" -j ACCEPT
 		if [ "$release" == "rpm" ]; then
-            /etc/init.d/iptables save
-            /etc/init.d/iptables restart
+			/etc/init.d/iptables save
+			/etc/init.d/iptables restart
 		else
 			iptables-save > /etc/iptables.up.rules
 			ip6tables-save > /etc/ip6tables.up.rules
@@ -589,8 +589,8 @@ DelIptables(){
 		ip6tables -D INPUT -m state --state NEW -m tcp -p tcp --dport "$acc_port" -j ACCEPT
 		ip6tables -D INPUT -m state --state NEW -m udp -p udp --dport "$acc_port" -j ACCEPT
 		if [ "$release" == "rpm" ]; then
-            /etc/init.d/iptables save
-            /etc/init.d/iptables restart
+			/etc/init.d/iptables save
+			/etc/init.d/iptables restart
 		else
 			iptables-save > /etc/iptables.up.rules
 			ip6tables-save > /etc/ip6tables.up.rules
@@ -708,9 +708,9 @@ AddAcc(){
 	SetAccSpeedUser
 	SetAccTransfer
 	SetAccForbid
-    [ -n "$acc_speed_con" ] && limit_option="-s $acc_speed_con"
-    [ -n "$acc_speed_user" ] && limit_option="$limit_option -S $acc_speed_user"
-    [ -n "$acc_forbidden_port" ] && limit_option="$limit_option -f $acc_forbidden_port"
+	[ -n "$acc_speed_con" ] && limit_option="-s $acc_speed_con"
+	[ -n "$acc_speed_user" ] && limit_option="$limit_option -S $acc_speed_user"
+	[ -n "$acc_forbidden_port" ] && limit_option="$limit_option -f $acc_forbidden_port"
 	cd "$SSR_PATH"
 	if python mujson_mgr.py -a -u "$acc_user" -p "$acc_port" -k "$acc_passwd" -m "$acc_method" -O "$acc_protocol" -G "$acc_protocol_param" -o "$acc_obfs" -g "$acc_obfs_param" -t "$acc_transfer" "$limit_option"|grep -q "add user info"; then
 		echo -e "$info 用户添加成功! " && echo
@@ -854,9 +854,9 @@ InstallLibsodium(){
 		echo -e "$info 编译安装..."
 		./configure && make && make install
 	fi
-    if ! ldconfig -p | grep -q "/usr/local/lib"; then
-        echo "/usr/local/lib" > /etc/ld.so.conf.d/usr_local_lib.conf
-    fi
+	if ! ldconfig -p | grep -q "/usr/local/lib"; then
+		echo "/usr/local/lib" > /etc/ld.so.conf.d/usr_local_lib.conf
+	fi
 	ldconfig
 	cd .. && rm -rf libsodium-$libso_ver.tar.gz && rm -rf libsodium-$libso_ver
 	[ ! -e "/usr/local/lib/libsodium.so" ] && echo -e "$error libsodium 安装失败 !" && exit 1
