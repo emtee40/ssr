@@ -1031,6 +1031,48 @@ ConfigAccForbid(){
     fi
 }
 
+ConfigAccUser(){
+    $JQ_FILE '(.[]|select(.port=='"$acc_port"')|.user)='"$acc_user"'' "$MUDB_FILE" > mudb.tmp
+    mv mudb.tmp "$MUDB_FILE"
+    echo && echo $separator && echo -e "修改用户名成功！新用户名: $green $acc_user $plain" && echo $separator && echo
+    RestartSsr
+}
+
+ConfigAccPort(){
+    echo "请输入要设置的用户 端口(请勿重复, 用于区分)"
+    while read -p "(默认: 随机生成):" acc_port_new; do
+        case "$acc_port_new" in
+            ("")
+                GetFreePort
+                break
+            ;;
+            (*[!0-9]*)
+                echo -e "$error 请输入正确的数字！(1-65535) "
+            ;;
+            (*)
+                if [ "$acc_port_new" -ge 1 ] && [ "$acc_port_new" -le 65535 ]; then
+                    acc_info=$($JQ_FILE '.[]|select(.port=="'"$acc_port_new"'")' $MUDB_FILE)
+                    if [ -z "$acc_info" ]; then
+                        if ss -lpn | grep -q ":$acc_port_new "; then
+                            echo -e "$error 端口已被其他程序占用！请重新输入！ "
+                        else
+                            break
+                        fi
+                    else
+                        echo -e "$error 端口已被其他用户占用！请重新输入！ "
+                    fi
+                else
+                    echo -e "$error 请输入正确的数字！(1-65535) "
+                fi
+            ;;
+        esac
+    done
+    $JQ_FILE '(.[]|select(.port=='"$acc_port"')|.port)='"$acc_port"'' "$MUDB_FILE" > mudb.tmp
+    mv mudb.tmp "$MUDB_FILE"
+    echo && echo $separator && echo -e "修改端口成功！新端口: $green $acc_port_new $plain" && echo $separator && echo
+    RestartSsr
+}
+
 ConfigAccStatus(){
     case $acc_enable in
         1)
@@ -1192,7 +1234,7 @@ ConfigAccMenu(){
         ;;
         14) ReadAccPort && SetAccUser && ConfigAccUser
         ;;
-        15) ReadAccPort && SetAccPort && ConfigAccPort
+        15) ReadAccPort && ConfigAccPort
         ;;
         16) ReadAccPort && ConfigAccAll
         ;;
