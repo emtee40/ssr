@@ -1067,7 +1067,7 @@ ConfigAccPort(){
             ;;
         esac
     done
-    $JQ_FILE '(.[]|select(.port=='"$acc_port"')|.port)='"$acc_port"'' "$MUDB_FILE" > mudb.tmp
+    $JQ_FILE '(.[]|select(.port=='"$acc_port"')|.port)='"$acc_port_new"'' "$MUDB_FILE" > mudb.tmp
     mv mudb.tmp "$MUDB_FILE"
     echo && echo $separator && echo -e "修改端口成功！新端口: $green $acc_port_new $plain" && echo $separator && echo
     RestartSsr
