@@ -15,6 +15,7 @@ export PATH
 sh_ver="1.0.29"
 jq_ver="1.6"
 libso_ver_default="1.0.17"
+SH_FILE="/usr/local/bin/ssr"
 SSR_PATH="/usr/local/shadowsocksr"
 CONFIG_FILE="$SSR_PATH/config.json"
 USERMYSQL_FILE="$SSR_PATH/usermysql.json"
@@ -57,6 +58,19 @@ CheckRelease()
 		fi
 	fi
 
+	if [ -s "/etc/redhat-release" ]; then
+		release_ver=$(grep -oE  "[0-9.]+" /etc/redhat-release)
+	else
+		release_ver=$(grep -oE  "[0-9.]+" /etc/issue)
+	fi
+	release_ver_main=${release_ver%%.*}
+
+	if [ "$(uname -m | grep -c 64)" -gt 0 ]; then
+		release_bit="64"
+	else
+		release_bit="32"
+	fi
+
 	depends=(wget unzip vim curl crond python)
 	for depend in "${depends[@]}"; do
 		DEPEND_PATH="$(command -v "$depend" || true)"
@@ -73,13 +87,6 @@ CheckRelease()
 		fi
 	done
 
-#	if [ -s "/etc/redhat-release" ]; then
-#		cent_ver=$(grep -oE  "[0-9.]+" /etc/redhat-release)
-#	else
-#		cent_ver=$(grep -oE  "[0-9.]+" /etc/issue)
-#	fi
-#	cent_ver_main=${cent_ver%%.*}
-
 	[ ! "$(wget -V)" ] && echo -e "$error 依赖 wget 安装失败..." && exit 1
 	[ ! "$(unzip -v)" ] && echo -e "$error 依赖 unzip 安装失败..." && exit 1
 	[ ! "$(curl -V)" ] && echo -e "$error 依赖 curl 安装失败..." && exit 1
@@ -92,7 +99,6 @@ ChangeDate(){
 }
 
 RestartCron(){
-	[ -z $release ] && CheckRelease
 	case "$release" in
 		"rpm") /etc/init.d/crond restart
 		;;
@@ -105,7 +111,7 @@ RestartCron(){
 
 InstallSsr(){
 	echo -e "$info 开始下载/安装 ShadowsocksR文件..."
-	wget --no-check-certificate -qO "https://github.com/woniuzfb/shadowsocksr/archive/manyuser.zip"
+	wget --no-check-certificate "https://github.com/woniuzfb/shadowsocksr/archive/manyuser.zip" -qO manyuser.zip
 	[ ! -e "./manyuser.zip" ] && echo -e "$error ShadowsocksR服务端 压缩包 下载失败 !" && exit 1
 	unzip "./manyuser.zip" && rm -rf "./manyuser.zip"
 	[ ! -e "./shadowsocksr-manyuser/" ] && echo -e "$error ShadowsocksR服务端 解压失败 !" && exit 1
@@ -118,7 +124,6 @@ InstallSsr(){
 	[ ! -e "$USER_API_CONFIG_FILE" ] && echo -e "$error ShadowsocksR服务端 apiconfig.py 复制失败 !" && exit 1
 
 	sed -i "s/API_INTERFACE = 'sspanelv2'/API_INTERFACE = 'mudbjson'/" "$USER_API_CONFIG_FILE"
-	sed -i "s/SERVER_PUB_ADDR = '127.0.0.1'/SERVER_PUB_ADDR = '$server_name'/" "$USER_API_CONFIG_FILE"
 	sed -i 's/ \/\/ only works under multi-user mode//g' "$USER_CONFIG_FILE"
 	echo -e "$info ShadowsocksR服务端 下载完成 !"
 
@@ -141,13 +146,42 @@ InstallSsr(){
     fi
 }
 
-InstallJq(){
-	echo -e "$info 开始下载/安装 JSNO解析器 JQ..."
-	if [ ! -e "$JQ_FILE" ]; then
-		if [ "$(uname -m | grep -c 64)" -gt 0 ]; then
-			wget --no-check-certificate "https://github.com/stedolan/jq/releases/download/jq-$jq_ver/jq-linux64" -qO "$JQ_FILE"
+UninstallSsr(){
+	[ ! -e "$SSR_PATH" ] && echo -e "$error 没有安装 ShadowsocksR，请检查 !" && exit 1
+	CheckRelease
+	echo "确定要 卸载ShadowsocksR？[y/N]" && echo
+	read -p "(默认: n):" uninstall_ssr_yn
+	[ -z "$uninstall_ssr_yn" ] && uninstall_ssr_yn="n"
+	if [[ "$uninstall_ssr_yn" == [Yy] ]]; then
+		StopSsr
+		GetAccsInfo
+		for acc_port in "${accs_port[@]}"; do
+			DelIptables
+		done
+		if crontab -l | grep -q "ssrmu.sh"; then
+			ClearTransferAllCronStop
+		fi
+		if [ "$release" = "rpm" ]; then
+			chkconfig --del ssrmu
 		else
-			wget --no-check-certificate "https://github.com/stedolan/jq/releases/download/jq-$jq_ver/jq-linux32" -qO "$JQ_FILE"
+			update-rc.d -f ssrmu remove
+		fi
+		rm -rf "$SSR_PATH" && rm -rf /etc/init.d/ssrmu
+		echo && echo " ShadowsocksR 卸载完成 !" && echo
+	else
+		echo && echo " 卸载已取消..." && echo
+	fi
+}
+
+InstallJq(){
+	if [ ! -e "$JQ_FILE" ]; then
+		echo -e "$info 开始下载/安装 JSNO解析器 JQ..."
+		#experimental# grep -Po '"tag_name": "jq-\K.*?(?=")'
+		jq_ver=$(curl --silent -m 10 "https://api.github.com/repos/stedolan/jq/releases/latest" |  grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' || true)
+		if [ -n "$jq_ver" ]; then
+			wget --no-check-certificate "https://github.com/stedolan/jq/releases/download/jq-$jq_ver/jq-linux$release_bit" -qO "$JQ_FILE"
+		else
+			mv "$SSR_PATH/jq-linux$release_bit" "$JQ_FILE"
 		fi
 		[ ! -e "$JQ_FILE" ] && echo -e "$error 下载JQ解析器失败，请检查 !" && exit 1
 		chmod +x "$JQ_FILE"
@@ -170,6 +204,7 @@ SetServerName(){
 默认为本机外网IP，如果要自动检测外网IP，请留空直接回车"
 	read -p "(默认: 本机IP):" server_name
 	[ -z "$server_name" ] && GetServerIp && server_name=$server_ip
+	sed -i "s/SERVER_PUB_ADDR = '127.0.0.1'/SERVER_PUB_ADDR = '$server_name'/" "$USER_API_CONFIG_FILE"
 	echo && echo -e "	IP/域名: $red_background $server_name $plain" && echo
 }
 
@@ -182,17 +217,14 @@ F G H J K L Z X C V B N M
 	name_array_size=${#name_array[*]}
 	name_len=0
 	acc_user=""
-	while [ $name_len -lt $name_size ]; do
-		name_index=$((RANDOM%name_array_size))
-		acc_user="$acc_user${name_array[$name_index]}"
-		((name_len++))
-	done
-	cd "$SSR_PATH"
 	while :;do
-		acc_info=$(python mujson_mgr.py -l -u "$acc_user")
-		if [ -n "$acc_info" ]; then
-			RandAccUser
-		else
+		while [ $name_len -lt $name_size ]; do
+			name_index=$((RANDOM%name_array_size))
+			acc_user="$acc_user${name_array[$name_index]}"
+			((name_len++))
+		done
+		acc_info=$($JQ_FILE '.[]|select(.user=="'"$acc_user"'")' $MUDB_FILE)
+		if [ -z "$acc_info" ]; then
 			break
 		fi
 	done
@@ -206,7 +238,7 @@ SetAccUser(){
 			RandAccUser
 			break
 		else
-			acc_info=$(python mujson_mgr.py -l -u "$acc_user")
+			acc_info=$($JQ_FILE '.[]|select(.user=="'"$acc_user"'")' $MUDB_FILE)
 			if [ -z "$acc_info" ]; then
 				break
 			else
@@ -219,8 +251,7 @@ SetAccUser(){
 
 GetFreePort(){
     read lowerport upperport < /proc/sys/net/ipv4/ip_local_port_range
-    while :
-    do
+    while :;do
             acc_port=$(shuf -i "$lowerport"-"$upperport" -n 1)
             ss -lpn | grep -q ":$acc_port " || break
     done
@@ -240,7 +271,7 @@ SetAccPort(){
 			;;
 			(*)
 				if [ "$acc_port" -ge 1 ] && [ "$acc_port" -le 65535 ]; then
-					acc_info=$(python mujson_mgr.py -l -p "$acc_port")
+					acc_info=$($JQ_FILE '.[]|select(.port=="'"$acc_port"'")' $MUDB_FILE)
 					if [ -z "$acc_info" ]; then
 						if ss -lpn | grep -q ":$acc_port "; then
 							echo -e "$error 端口已被其他程序占用！请重新输入！ "
@@ -251,7 +282,6 @@ SetAccPort(){
 					else
 						echo -e "$error 端口已被其他用户占用！请重新输入！ "
 					fi
-					break
 				else
 					echo -e "$error 请输入正确的数字！(1-65535) "
 				fi
@@ -286,19 +316,19 @@ SetAccPasswd(){
 SetAccMethod(){
 	echo -e "请选择要设置的用户 加密方式
 	
- $green 1.$plain none
+  ${green}1.$plain none
  $tip 如果使用 auth_chain_* 系列协议，建议加密方式选择 none (该系列协议自带 RC4 加密)，混淆随意
  
- $green 2.$plain rc4
- $green 3.$plain rc4-md5
- $green 4.$plain rc4-md5-6
+  ${green}2.$plain rc4
+  ${green}3.$plain rc4-md5
+  ${green}4.$plain rc4-md5-6
  
- $green 5.$plain aes-128-ctr
- $green 6.$plain aes-192-ctr
- $green 7.$plain aes-256-ctr
+  ${green}5.$plain aes-128-ctr
+  ${green}6.$plain aes-192-ctr
+  ${green}7.$plain aes-256-ctr
  
- $green 8.$plain aes-128-cfb
- $green 9.$plain aes-192-cfb
+  ${green}8.$plain aes-128-cfb
+  ${green}9.$plain aes-192-cfb
  ${green}10.$plain aes-256-cfb
  
  ${green}11.$plain aes-128-cfb8
@@ -309,15 +339,15 @@ SetAccMethod(){
  ${green}15.$plain chacha20
  ${green}16.$plain chacha20-ietf
  $tip salsa20/chacha20-*系列加密方式，需要额外安装依赖 libsodium ，否则会无法启动ShadowsocksR !" && echo
-	read -p "(默认: 10. aes-256-cfb):" m_number
-	method_array=(
+	read -p "(默认: 10. aes-256-cfb):" acc_method_number
+	acc_method_array=(
 		none rc4 rc4-md5 rc4-md5-6 aes-128-ctr 
 		aes-192-ctr aes-256-ctr aes-128-cfb aes-192-cfb 
 		aes-256-cfb  aes-128-cfb8 aes-192-cfb8 aes-256-cfb8 
 		salsa20 chacha20 chacha20-ietf 
 	)
-	acc_method=${method_array["$m_number" - 1]}
-	[ -z "$acc_method" ] && acc_method=${method_array[9]}
+	acc_method=${acc_method_array["$acc_method_number" - 1]}
+	[ -z "$acc_method" ] && acc_method=${acc_method_array[9]}
 	echo && echo "$separator" && echo -e "	加密 : $green$acc_method$plain" && echo "$separator" && echo
 }
 
@@ -331,7 +361,7 @@ SetAccProtocol(){
  ${green}5.$plain auth_chain_a
  ${green}6.$plain auth_chain_b
  $tip 如果使用 auth_chain_* 系列协议，建议加密方式选择 none (该系列协议自带 RC4 加密)，混淆随意" && echo
-	read -e -p "(默认: 4. auth_aes128_sha1):" p_number
+	read -e -p "(默认: 4. auth_aes128_sha1):" protocol_number
 	protocol_array=(
 		origin 
 		auth_sha1_v4 
@@ -340,7 +370,7 @@ SetAccProtocol(){
 		auth_chain_a
 		auth_chain_b
 	)
-	acc_protocol=${protocol_array["$p_number" - 1]}
+	acc_protocol=${protocol_array["$protocol_number" - 1]}
 	[ -z "$acc_protocol" ] && acc_protocol=${protocol_array[3]}
 	if [ "$acc_protocol" == "auth_sha1_v4" ]; then
         read -p "是否设置 协议插件兼容原版(_compatible)？[Y/n 默认否]" protocol_yn
@@ -357,7 +387,7 @@ SetAccProtocolParam(){
 	while read -p "(默认: 无限):" acc_protocol_param; do
         case "$acc_protocol_param" in
             ("")
-                acc_protocol_param="" && echo && break
+                break
             ;;
             (*[!0-9]*)
                 echo -e "$error 请输入正确的数字(1-9999) "
@@ -386,7 +416,7 @@ SetAccObfs(){
  $tip 如果使用 ShadowsocksR 代理游戏，建议选择 混淆兼容原版或 plain 混淆，然后客户端选择 plain，否则会增加延迟 !
  另外, 如果你选择了 tls1.2_ticket_auth，那么客户端可以选择 tls1.2_ticket_fastauth，这样即能伪装又不会增加延迟 !
  如果你是在日本、美国等热门地区搭建，那么选择 plain 混淆可能被墙几率更低 !" && echo
-	read -p "(默认: 5. tls1.2_ticket_auth):" o_number
+	read -p "(默认: 5. tls1.2_ticket_auth):" obfs_number
 	obfs_array=(
 		plain 
 		http_simple 
@@ -394,19 +424,18 @@ SetAccObfs(){
 		random_head 
 		tls1.2_ticket_auth
 	)
-	acc_obfs=${obfs_array["$o_number" - 1]}
+	acc_obfs=${obfs_array["$obfs_number" - 1]}
 	[ -z "$acc_obfs" ] && acc_obfs=${obfs_array[4]}
 	if [ "$acc_obfs" != "plain" ]; then
         read -p "是否设置 混淆插件兼容原版(_compatible)？[Y/n 默认否]" obfs_compa_yn
         [ -z "$obfs_compa_yn" ] && obfs_compa_yn="n"
         [[ "$obfs_compa_yn" == [Yy] ]] && acc_obfs=$acc_obfs"_compatible"
-        echo
 	fi
 	echo && echo "$separator" && echo -e "	混淆 : $green$acc_obfs$plain" && echo "$separator" && echo
 }
 
 SetAccObfsParam(){
-	echo -e "请输入要设置的混淆参数 (${green} 伪装 $plain)"
+	echo -e "请输入要设置的混淆参数 ($green 伪装 $plain)"
 	read -p "(默认: 随机):" acc_obfs_param
 	[ -z "$acc_obfs_param" ] && acc_obfs_param=$(echo a"$(od -An -N2 -i /dev/random)" | sed 's/ //g')."wns.windows.com"
 	echo "$separator" && echo -e "	混淆参数 : $green$acc_obfs_param$plain" && echo "$separator"
@@ -432,7 +461,12 @@ SetAccSpeedCon(){
             ;;
         esac
 	done
-    [ -z "$acc_speed_con" ] && acc_speed_con_text="无限" || acc_speed_con_text="$acc_speed_con KB/S"
+    if [ -z "$acc_speed_con" ]; then
+		acc_speed_con_text="无限"
+	else
+		acc_speed_con_byte=$(numfmt --from=iec "$acc_speed_con"K)
+		acc_speed_con_text=$(numfmt --to=iec --suffix=B "$acc_speed_con_byte")"/s"
+	fi
     echo && echo "$separator" && echo -e "	单线程限速 : $green$acc_speed_con_text$plain" && echo "$separator" && echo
 }
 
@@ -456,22 +490,27 @@ SetAccSpeedUser(){
             ;;
         esac
 	done
-    [ -z "$acc_speed_user" ] && acc_speed_user_text="无限" || acc_speed_user_text="$acc_speed_user KB/S"
+    if [ -z "$acc_speed_user" ]; then
+		acc_speed_user_text="无限"
+	else
+		acc_speed_user_byte=$(numfmt --from=iec "$acc_speed_user"K)
+		acc_speed_user_text=$(numfmt --to=iec --suffix=B "$acc_speed_user_byte")"/s"
+	fi
     echo && echo "$separator" && echo -e "	用户总限速 : $green$acc_speed_user_text$plain" && echo "$separator" && echo
 }
 
 SetAccTransfer(){
 	echo -e "请输入要设置的用户 可使用的总流量上限(单位: GB, 1-838868 GB)"
-	while read -p "(默认: 1000G):" acc_transfer_enable; do
-        case "$acc_transfer_enable" in
+	while read -p "(默认: 1000G):" acc_transfer; do
+        case "$acc_transfer" in
             ("")
-                acc_transfer_enable="1000" && echo && break
+                acc_transfer="1000" && echo && break
             ;;
            (*[!0-9]*)
                 echo -e "$error 请输入正确的数字(1-838868) "
             ;;
             (*)
-                if [ "$acc_transfer_enable" -ge 1 ] && [ "$acc_transfer_enable" -le 838868 ]; then
+                if [ "$acc_transfer" -ge 1 ] && [ "$acc_transfer" -le 838868 ]; then
                     break
                 else
                     echo -e "$error 请输入正确的数字(1-838868)"
@@ -479,8 +518,13 @@ SetAccTransfer(){
             ;;
         esac
 	done
-    [ "$acc_transfer_enable" == "838868" ] && acc_transfer_enable_text="无限" || acc_transfer_enable_text="$acc_transfer_enable G"
-    echo && echo "$separator" && echo -e "	用户总限速 : $green$acc_transfer_enable_text$plain" && echo "$separator" && echo
+    if [ "$acc_transfer" == "838868" ]; then
+		acc_transfer_text="无限"
+	else
+		acc_transfer_enable=$(numfmt --from=iec "$acc_d_byte"G)
+		acc_transfer_text=$(numfmt --to=iec "$acc_transfer_enable")
+	fi
+    echo && echo "$separator" && echo -e "	用户总限速 : $green$acc_transfer_text$plain" && echo "$separator" && echo
 }
 
 SetAccForbid(){
@@ -493,112 +537,6 @@ SetAccForbid(){
 	read -p "(默认为空 不禁止访问任何端口):" forbid
 	[ -z "$forbid" ] && forbid_text="无" || forbid_text="$forbid"
 	echo && echo "$separator" && echo -e "	禁止的端口 : $green$forbid_text$plain" && echo "$separator" && echo
-}
-
-GetAccsInfo(){
-	accs_count=$($JQ_FILE -r '. | length' $MUDB_FILE)
-	[ "$accs_count" == 0 ] && echo -e "$error 没有发现 用户，请检查 !" && exit 1
-	IFS=" " read -a accs_d <<< "$($JQ_FILE -r '[.[].d] | @sh' $MUDB_FILE)"
-	# OR accs_d=($($JQ_FILE -r '[.[].d] | @sh' $MUDB_FILE))
-	#IFS=" " read -a accs_enable <<< "$($JQ_FILE -r '[.[].enable] | @sh' $MUDB_FILE)"
-	#IFS=" " read -a accs_forbidden_port <<< "$($JQ_FILE -r '[.[].forbidden_port] | @sh' $MUDB_FILE)"
-	#IFS=" " read -a accs_method <<< "$($JQ_FILE -r '[.[].method] | @sh' $MUDB_FILE)"
-	#IFS=" " read -a accs_obfs <<< "$($JQ_FILE -r '[.[].obfs] | @sh' $MUDB_FILE)"
-	#IFS=" " read -a accs_obfs_param <<< "$($JQ_FILE -r '[.[].obfs_param] | @sh' $MUDB_FILE)"
-	#IFS=" " read -a accs_passwd <<< "$($JQ_FILE -r '[.[].passwd] | @sh' $MUDB_FILE)"
-	IFS=" " read -a accs_port <<< "$($JQ_FILE -r '[.[].port] | @sh' $MUDB_FILE)"
-	#IFS=" " read -a accs_protocol <<< "$($JQ_FILE -r '[.[].protocol] | @sh' $MUDB_FILE)"
-	#IFS=" " read -a accs_protocol_param <<< "$($JQ_FILE -r '[.[].protocol_param] | @sh' $MUDB_FILE)"
-	#IFS=" " read -a accs_speed_con <<< "$($JQ_FILE -r '[.[].speed_limit_per_con] | @sh' $MUDB_FILE)"
-	#IFS=" " read -a accs_speed_user <<< "$($JQ_FILE -r '[.[].speed_limit_per_user] | @sh' $MUDB_FILE)"
-	IFS=" " read -a accs_transfer_enable <<< "$($JQ_FILE -r '[.[].transfer_enable] | @sh' $MUDB_FILE)"
-	IFS=" " read -a accs_u <<< "$($JQ_FILE -r '[.[].u] | @sh' $MUDB_FILE)"
-	IFS=" " read -a accs_user <<< "$($JQ_FILE -r '[.[].user] | @sh' $MUDB_FILE)"
-}
-
-#BytesToHuman() {
-#    b=${1:-0}; d=''; s=0; S=(Bytes {K,M,G,T,P,E,Z,Y}B)
-#    while ((b > 1024)); do
-#        d="$(printf ".%02d" $((b % 1024 * 100 / 1024)))"
-#        b=$((b / 1024))
-#        let s++
-#    done
-#    echo "$b$d ${S[$s]}"
-#}
-
-ListAccs(){
-	GetAccsInfo
-	accs_list=""
-	accs_transfer_used=0
-	for((index = 0; index < "$accs_count"; index++)); do
-		acc_transfer_used=$((accs_d[index]+accs_u[index]))
-		acc_transfer_used_text=$(numfmt --to=iec --suffix=B "$acc_transfer_used")
-		acc_transfer_left=$((accs_transfer_enable[index]-acc_transfer_used))
-		acc_transfer_left_text=$(numfmt --to=iec --suffix=B "$acc_transfer_left")
-		accs_transfer_used=$((acc_transfer_used+accs_transfer_used))
-		acc_transfer_enable_text=$(numfmt --to=iec --suffix=B "${accs_transfer_enable[index]}")
-		accs_list=$accs_list"#$((index+1)) 用户名: $green${accs_user[index]}$plain\t 端口: $green${accs_port[index]}$plain\t 流量使用情况(已用+剩余=总): $green$acc_transfer_used_text$plain + $green$acc_transfer_left_text$plain = $green$acc_transfer_enable_text$plain\n"
-	done
-	accs_transfer_used_text=$(numfmt --to=iec --suffix=B "$accs_transfer_used")
-	echo && echo -e "=== 用户总数 $green_background $accs_count $plain"
-	echo -e "$accs_list"
-	echo -e "=== 当前所有用户已使用流量总和: $green_background $accs_transfer_used_text $plain\n"
-}
-
-GetAccInfo(){
-	acc_info_array=()
-	while IFS='' read -r acc_line; do
-		acc_info_array+=("$acc_line");
-	done < <($JQ_FILE -r '.[] | select(.port=='"$acc_port"') | .[] | @sh' $MUDB_FILE)
-	read acc_d acc_enable acc_forbidden_port acc_method acc_obfs acc_obfs_param acc_passwd acc_port acc_protocol acc_protocol_param acc_speed_con acc_speed_user acc_transfer_enable acc_u acc_user <<< "${acc_info_array[@]}"
-	acc_forbidden_port=${acc_forbidden_port//\'/}
-	acc_method=${acc_method//\'/}
-	acc_obfs=${acc_obfs//\'/}
-	acc_obfs_param=${acc_obfs_param//\'/}
-	acc_passwd=${acc_passwd//\'/}
-	acc_protocol=${acc_protocol//\'/}
-	acc_protocol_param=${acc_protocol_param//\'/}
-	acc_user=${acc_user//\'/}
-	acc_transfer_used=$((acc_d+accs_u))
-	acc_transfer_left=$((acc_transfer_enable-acc_transfer_used))
-}
-
-AddAcc(){
-	SetAccUser
-	SetAccPort
-	SetAccPasswd
-	SetAccMethod
-	SetAccProtocol
-	SetAccProtocolParam
-	SetAccObfs
-	SetAccObfsParam
-	SetAccSpeedCon
-	SetAccSpeedUser
-	SetAccTransfer
-	SetAccForbid
-    [ -n "$acc_speed_con" ] && limit_option="-s $acc_speed_con"
-    [ -n "$acc_speed_user" ] && limit_option="$limit_option -S $acc_speed_user"
-    [ -n "$acc_forbidden_port" ] && limit_option="$limit_option -f $acc_forbidden_port"
-    user_info=$(python mujson_mgr.py -a -u "$acc_user" -p "$acc_port" -k "$acc_passwd" -m "$acc_method" -O "$acc_protocol" -G "$acc_protocol_param" -o "$acc_obfs" -g "$acc_obfs_param" -t "$acc_transfer_enable" "$limit_option"|grep -w "add user info")
-	if [ -z "$user_info" ]; then
-		echo -e "$error 用户添加失败 ${green}[用户名: $acc_user , 端口: $acc_port]$plain "
-		exit 1
-	fi
-	echo -e "$info 用户添加成功! " && echo
-	AddIptables
-	ViewAccInfo
-}
-
-AddAccAgain(){
-	while read -p "是否继续 添加用户配置？[Y/n 默认否]:" add_again_yn; do
-		[ -z "$add_again_yn" ] && add_again_yn="n"
-		if [[ "$add_again_yn" == [Nn] ]]; then
-			break
-		else
-			echo -e "$info 继续 添加用户配置..."
-			AddAcc
-		fi
-	done
 }
 
 AddIptables(){
@@ -653,6 +591,142 @@ DelIptables(){
 	fi
 }
 
+GetAccsInfo(){
+	accs_count=$($JQ_FILE -r '. | length' $MUDB_FILE)
+	[ "$accs_count" == 0 ] && echo -e "$error 没有发现 用户，请检查 !" && exit 1
+	IFS=" " read -a accs_d <<< "$($JQ_FILE -r '[.[].d] | @sh' $MUDB_FILE)"
+	# OR accs_d=($($JQ_FILE -r '[.[].d] | @sh' $MUDB_FILE))
+	#IFS=" " read -a accs_enable <<< "$($JQ_FILE -r '[.[].enable] | @sh' $MUDB_FILE)"
+	#IFS=" " read -a accs_forbidden_port <<< "$($JQ_FILE -r '[.[].forbidden_port] | @sh' $MUDB_FILE)"
+	#IFS=" " read -a accs_method <<< "$($JQ_FILE -r '[.[].method] | @sh' $MUDB_FILE)"
+	#IFS=" " read -a accs_obfs <<< "$($JQ_FILE -r '[.[].obfs] | @sh' $MUDB_FILE)"
+	#IFS=" " read -a accs_obfs_param <<< "$($JQ_FILE -r '[.[].obfs_param] | @sh' $MUDB_FILE)"
+	#IFS=" " read -a accs_passwd <<< "$($JQ_FILE -r '[.[].passwd] | @sh' $MUDB_FILE)"
+	IFS=" " read -a accs_port <<< "$($JQ_FILE -r '[.[].port] | @sh' $MUDB_FILE)"
+	#IFS=" " read -a accs_protocol <<< "$($JQ_FILE -r '[.[].protocol] | @sh' $MUDB_FILE)"
+	#IFS=" " read -a accs_protocol_param <<< "$($JQ_FILE -r '[.[].protocol_param] | @sh' $MUDB_FILE)"
+	#IFS=" " read -a accs_speed_con <<< "$($JQ_FILE -r '[.[].speed_limit_per_con] | @sh' $MUDB_FILE)"
+	#IFS=" " read -a accs_speed_user <<< "$($JQ_FILE -r '[.[].speed_limit_per_user] | @sh' $MUDB_FILE)"
+	IFS=" " read -a accs_transfer_enable <<< "$($JQ_FILE -r '[.[].transfer_enable] | @sh' $MUDB_FILE)"
+	IFS=" " read -a accs_u <<< "$($JQ_FILE -r '[.[].u] | @sh' $MUDB_FILE)"
+	IFS=" " read -a accs_user <<< "$($JQ_FILE -r '[.[].user] | @sh' $MUDB_FILE)"
+}
+
+#BytesToHuman() {
+#    b=${1:-0}; d=''; s=0; S=(Bytes {K,M,G,T,P,E,Z,Y}B)
+#    while ((b > 1024)); do
+#        d="$(printf ".%02d" $((b % 1024 * 100 / 1024)))"
+#        b=$((b / 1024))
+#        let s++
+#    done
+#    echo "$b$d ${S[$s]}"
+#}
+
+ListAccs(){
+	GetAccsInfo
+	accs_list=""
+	accs_transfer_used=0
+	for((index = 0; index < "$accs_count"; index++)); do
+		acc_transfer_used=$(((accs_d[index]+accs_u[index])*1024))
+		acc_transfer_used_text=$(numfmt --to=iec --suffix=B "$acc_transfer_used")
+		acc_transfer_left=$((accs_transfer_enable[index]-acc_transfer_used))
+		acc_transfer_left_text=$(numfmt --to=iec --suffix=B "$acc_transfer_left")
+		accs_transfer_used=$((acc_transfer_used+accs_transfer_used))
+		acc_transfer_enable_text=$(numfmt --to=iec --suffix=B "${accs_transfer_enable[index]}")
+		accs_list=$accs_list"#$((index+1)) 用户名: $green${accs_user[index]}$plain\t 端口: $green${accs_port[index]}$plain\t 流量使用情况(已用+剩余=总): $green$acc_transfer_used_text$plain + $green$acc_transfer_left_text$plain = $green$acc_transfer_enable_text$plain\n"
+	done
+	accs_transfer_used_text=$(numfmt --to=iec --suffix=B "$accs_transfer_used")
+	echo && echo -e "=== 用户总数 $green_background $accs_count $plain"
+	echo -e "$accs_list"
+	echo -e "=== 当前所有用户已使用流量总和: $green_background $accs_transfer_used_text $plain\n"
+}
+
+GetAccInfo(){
+	acc_info_array=()
+	while IFS='' read -r acc_line; do
+		acc_info_array+=("$acc_line");
+	done < <($JQ_FILE -r '.[] | select(.port=='"$acc_port"') | .[] | @sh' $MUDB_FILE)
+	read acc_d acc_enable acc_forbidden_port acc_method acc_obfs acc_obfs_param acc_passwd acc_port acc_protocol acc_protocol_param acc_speed_con acc_speed_user acc_transfer_enable acc_u acc_user <<< "${acc_info_array[@]}"
+	acc_forbidden_port=${acc_forbidden_port//\'/}
+	acc_method=${acc_method//\'/}
+	acc_obfs=${acc_obfs//\'/}
+	acc_obfs_param=${acc_obfs_param//\'/}
+	acc_passwd=${acc_passwd//\'/}
+	acc_protocol=${acc_protocol//\'/}
+	acc_protocol_param=${acc_protocol_param//\'/}
+	acc_user=${acc_user//\'/}
+	acc_transfer_used=$(((acc_d+accs_u)*1024))
+	acc_transfer_left=$((acc_transfer_enable-acc_transfer_used))
+	acc_d_byte=$((acc_d*1024))
+	acc_u_byte=$((acc_u*1024))
+	acc_d_text=$(numfmt --to=iec --suffix=B "$acc_d_byte")
+	acc_u_text=$(numfmt --to=iec --suffix=B "$acc_u_byte")
+}
+
+ViewAccInfo(){
+	[ -z "$server_name" ] && server_name=$(< "$USER_API_CONFIG_FILE" grep "SERVER_PUB_ADDR = "|awk -F "[']" '{print $2}')
+	clear && echo "===================================================" && echo
+	echo -e " 用户 [$acc_user] 的配置信息：" && echo
+	echo -e " 地址\t    : $green$server_name$plain"
+	echo -e " 端口\t    : $green$acc_port$plain"
+	echo -e " 密码\t    : $green$acc_passwd$plain"
+	echo -e " 加密\t    : $green$acc_method$plain"
+	echo -e " 协议\t    : $red$acc_protocol$plain"
+	echo -e " 混淆\t    : $red$acc_obfs$plain"
+	echo -e " 混淆的参数 : $green$acc_obfs_param$plain"
+	echo -e " 设备数限制 : $green$acc_protocol_param$plain"
+	echo -e " 单线程限速 : $green$acc_speed_con_text$plain"
+	echo -e " 用户总限速 : $green$acc_speed_user_text$plain"
+	echo -e " 禁止的端口 : $green$acc_port$plain"
+	echo
+	echo -e " 已使用流量 : 上传: $green$acc_u_text$plain + 下载: $green$acc_d_text$plain = $green$acc_transfer_used_text$plain"
+	echo -e " 剩余的流量 : $green$acc_transfer_left_text$plain"
+	echo -e " 用户总流量 : $green$acc_transfer_enable_text$plain"
+	echo -e "$ss_link"
+	echo -e "$ssr_link"
+	echo
+}
+
+AddAcc(){
+	SetAccUser
+	SetAccPort
+	SetAccPasswd
+	SetAccMethod
+	SetAccProtocol
+	SetAccProtocolParam
+	SetAccObfs
+	SetAccObfsParam
+	SetAccSpeedCon
+	SetAccSpeedUser
+	SetAccTransfer
+	SetAccForbid
+    [ -n "$acc_speed_con" ] && limit_option="-s $acc_speed_con"
+    [ -n "$acc_speed_user" ] && limit_option="$limit_option -S $acc_speed_user"
+    [ -n "$acc_forbidden_port" ] && limit_option="$limit_option -f $acc_forbidden_port"
+	cd "$SSR_PATH"
+	if python mujson_mgr.py -a -u "$acc_user" -p "$acc_port" -k "$acc_passwd" -m "$acc_method" -O "$acc_protocol" -G "$acc_protocol_param" -o "$acc_obfs" -g "$acc_obfs_param" -t "$acc_transfer" "$limit_option"|grep -q "add user info"; then
+		echo -e "$info 用户添加成功! " && echo
+	else
+		echo -e "$error 用户添加失败 ${green}[用户名: $acc_user , 端口: $acc_port]$plain "
+		exit 1
+	fi
+	AddIptables
+	SsSsrLink
+	ViewAccInfo
+}
+
+AddAccAgain(){
+	while read -p "是否继续 添加用户配置？[Y/n 默认否]:" add_again_yn; do
+		[ -z "$add_again_yn" ] && add_again_yn="n"
+		if [[ "$add_again_yn" == [Nn] ]]; then
+			break
+		else
+			echo -e "$info 继续 添加用户配置..."
+			AddAcc
+		fi
+	done
+}
+
 SsSsrLink(){
 	ss_link=""
 	if [ "$acc_protocol" == "origin" ] || [ "$acc_protocol" == "auth_sha1_v4_compatible" ]; then
@@ -666,30 +740,6 @@ SsSsrLink(){
 	acc_obfs_param_base64=$(echo -n "$acc_obfs_param"|base64 -w0 |sed 's/=//g;s/\//_/g;s/+/-/g')
 	ssr_url="ssr://"$(echo -n "$server_name:$acc_port:${acc_protocol//_compatible/}:$acc_method:${acc_obfs//_compatible/}:$acc_passwd_base64/?obfsparam=$acc_obfs_param_base64&protoparam=$acc_protocol_param_base64"|base64 -w0 |sed 's/=//g;s/\//_/g;s/+/-/g')
 	ssr_link=" SSR   链接 : $red$ssr_url$plain"
-}
-
-ViewAccInfo(){
-	server_name=$(< "$USER_API_CONFIG_FILE" grep "SERVER_PUB_ADDR = "|awk -F "[']" '{print $2}')
-	clear && echo "===================================================" && echo
-	echo -e " 用户 [$acc_user] 的配置信息：" && echo
-	echo -e " 地址\t    : $green$server_name$plain"
-	echo -e " 端口\t    : $green$acc_port$plain"
-	echo -e " 密码\t    : $green$acc_passwd$plain"
-	echo -e " 加密\t    : $green$acc_method$plain"
-	echo -e " 协议\t    : $red$acc_protocol$plain"
-	echo -e " 混淆\t    : $red$acc_obfs$plain"
-	echo -e " 混淆的参数 : $green$acc_obfs_param$plain"
-	echo -e " 设备数限制 : $green$acc_protocol_param$plain"
-	echo -e " 单线程限速 : $green$acc_speed_con KB/S$plain"
-	echo -e " 用户总限速 : $green$acc_speed_user KB/S$plain"
-	echo -e " 禁止的端口 : $green$acc_port$plain"
-	echo
-	echo -e " 已使用流量 : 上传: $green$acc_u$plain + 下载: $green$acc_d$plain = $green$acc_transfer_used$plain"
-	echo -e " 剩余的流量 : $green$acc_transfer_left$plain"
-	echo -e " 用户总流量 : $green$acc_transfer_enable$plain"
-	echo -e "$ss_link"
-	echo -e "$ssr_link"
-	echo
 }
 
 DownInit(){
@@ -735,38 +785,6 @@ InstallSsrMenu(){
 	StartSsr
 }
 
-UninstallSsr(){#TODO
-	[ ! -e "$SSR_PATH" ] && echo -e "$error 没有安装 ShadowsocksR，请检查 !" && exit 1
-	echo "确定要 卸载ShadowsocksR？[y/N]" && echo
-	read -p "(默认: n):" un_yn
-	[ -z "$un_yn" ] && un_yn="n"
-	if [[ "$un_yn" == [Yy] ]]; then
-		StopSsr
-		user_info=$(python mujson_mgr.py -l)
-		user_total=$(echo "$user_info"|wc -l)
-		if [ -n "$user_info" ]; then
-			for((integer = 1; integer <= "$user_total"; integer++))
-			do
-				acc_port=$(echo "$user_info"|sed -n "${integer}p"|awk '{print $4}')
-				DelIptables
-			done
-		fi
-		if crontab -l | grep -q "ssrmu.sh"; then
-			crontab_monitor_ssr_cron_stop
-			Clear_transfer_all_cron_stop
-		fi
-		if [ "$release" = "rpm" ]; then
-			chkconfig --del ssrmu
-		else
-			update-rc.d -f ssrmu remove
-		fi
-		rm -rf "$SSR_PATH" && rm -rf /etc/init.d/ssrmu
-		echo && echo " ShadowsocksR 卸载完成 !" && echo
-	else
-		echo && echo " 卸载已取消..." && echo
-	fi
-}
-
 ViewAccMenu(){
 	ListAccs
 	echo -e "请输入要查看的账号端口 "
@@ -788,6 +806,7 @@ ViewAccMenu(){
 		esac
 	done
 	GetAccInfo
+	SsSsrLink
 	ViewAccInfo
 }
 
@@ -802,7 +821,8 @@ InstallLibsodium(){
 		echo -e "$info libsodium 未安装，开始安装..."
 	fi
 	echo -e "$info 开始获取 libsodium 最新版本..."
-	libso_ver=$(curl --silent "https://api.github.com/repos/jedisct1/libsodium/releases/latest" | grep -Po '"tag_name": "\K.*?(?=")')
+	#experimental# grep -Po '"tag_name": "\K.*?(?=")'
+	libso_ver=$(curl --silent "https://api.github.com/repos/jedisct1/libsodium/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' || true)
 	[ -z "$libso_ver" ] && libso_ver=$libso_ver_default
 	echo -e "$info libsodium 最新版本为 $green$libso_ver$plain !"
 	if [ "$release" == "rpm" ]; then
@@ -810,23 +830,23 @@ InstallLibsodium(){
 		echo -e "$info 安装依赖..."
 		yum -y groupinstall "Development Tools"
 		echo -e "$info 下载..."
-		wget --no-check-certificate -qO "https://github.com/jedisct1/libsodium/releases/download/$libso_ver/libsodium-$libso_ver.tar.gz"
+		wget --no-check-certificate "https://github.com/jedisct1/libsodium/releases/download/$libso_ver/libsodium-$libso_ver.tar.gz" -qO "libsodium-$libso_ver.tar.gz"
 		echo -e "$info 解压..."
 		tar -xzf libsodium-$libso_ver.tar.gz && cd libsodium-"$libso_ver"
 		echo -e "$info 编译安装..."
 		./configure && make && make install
 	else
-		apt-get update
+		apt-get -y update
 		echo -e "$info 安装依赖..."
 		apt-get -y install build-essential
 		echo -e "$info 下载..."
-		wget --no-check-certificate -N "https://github.com/jedisct1/libsodium/releases/download/$libso_ver/libsodium-$libso_ver.tar.gz"
+		wget --no-check-certificate "https://github.com/jedisct1/libsodium/releases/download/$libso_ver/libsodium-$libso_ver.tar.gz" -qO "libsodium-$libso_ver.tar.gz"
 		echo -e "$info 解压..."
 		tar -xzf libsodium-$libso_ver.tar.gz && cd libsodium-$libso_ver
 		echo -e "$info 编译安装..."
 		./configure && make && make install
 	fi
-    if ! ldconfig -p | grep -wq "/usr/local/lib"; then
+    if ! ldconfig -p | grep -q "/usr/local/lib"; then
         echo "/usr/local/lib" > /etc/ld.so.conf.d/usr_local_lib.conf
     fi
 	ldconfig
@@ -884,7 +904,6 @@ ReadAccPort(){
 }
 
 ConfigAccDel(){
-	cd "$SSR_PATH"
 	if python mujson_mgr.py -d -p "$acc_port"|grep -q "delete user "; then
 		DelIptables
 		echo -e "$info 用户删除成功 ${green}[端口: $acc_port]$plain "
@@ -958,7 +977,7 @@ ConfigAccSpeedUser(){
 }
 
 ConfigAccTransfer(){
-	if python mujson_mgr.py -e -p "$acc_port" -t "$acc_transfer_enable"|grep -q "edit user "; then
+	if python mujson_mgr.py -e -p "$acc_port" -t "$acc_transfer"|grep -q "edit user "; then
 		echo -e "$info 用户总流量修改成功 ${green}[端口: $acc_port]$plain (注意：可能需要十秒左右才会应用最新配置)"
 	else
 		echo -e "$error 用户总流量修改失败 ${green}[端口: $acc_port]$plain " && exit 1
@@ -1037,6 +1056,7 @@ ${green}2.$plain  重新设置账号流量"
 		echo "已取消..." && exit 1
 	fi
 	echo && echo "操作成功..."
+	SsSsrLink
 	ViewAccInfo
 }
 
@@ -1074,7 +1094,8 @@ ConfigServerName(){
 	else
 		echo -e "$info 当前配置的服务器IP或域名为： $green$server_pub_addr$plain"
 	fi
-	sed -i "s/SERVER_PUB_ADDR = '${server_pub_addr}'/SERVER_PUB_ADDR = '${server_pub_addr}'/" "$USER_API_CONFIG_FILE"
+	sed -i "s/SERVER_PUB_ADDR = '${server_pub_addr}'/SERVER_PUB_ADDR = '${server_name}'/" "$USER_API_CONFIG_FILE"
+	echo && echo -e "修改成功	IP/域名: $red_background $server_name $plain" && echo
 }
 
 ConfigAccMenu(){
@@ -1102,10 +1123,11 @@ ConfigAccMenu(){
  $tip 修改用户账号后稍等片刻即可生效 !" && echo
 	read -p "(默认: 取消):" config_acc_num
 	[ -z "$config_acc_num" ] && echo "已取消..." && exit 1
+	cd "$SSR_PATH"
 	case $config_acc_num in
 		1) AddAcc && AddAccAgain
 		;;
-		2) ReadAccPort && DelAcc
+		2) ReadAccPort && ConfigAccDel
 		;;
 		3) ReadAccPort && GetAccInfo && ConfigAccStatus
 		;;
@@ -1164,6 +1186,7 @@ ClearTransferSetCron(){
 ClearTransferOne(){
 	List_port_user
 	ReadAccPort
+	cd "$SSR_PATH"
 	if python mujson_mgr.py -c -p "$acc_port"|grep -q "clear user "; then
 		echo -e "$error 用户已使用流量清零失败 ${green}[端口: $acc_port]$plain "
 	else
@@ -1173,7 +1196,8 @@ ClearTransferOne(){
 
 ClearTransferAll(){
 	GetAccsInfo
-	for acc_port in ${accs_port@}; do
+	cd "$SSR_PATH"
+	for acc_port in "${accs_port[@]}"; do
 		if python mujson_mgr.py -c -p "$acc_port"|grep -q "clear user "; then
 			echo -e "$info 用户流量清零成功 ${green}[端口: $acc_port]$plain "
 		else
@@ -1484,7 +1508,7 @@ OtherFunctions(){
 	esac
 }
 
-UpdateShell(){
+UpdateScript(){
 	sh_new_ver=$(wget --no-check-certificate -qO- -t1 -T3 "https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrmu.sh"|grep 'sh_ver="'|awk -F "=" '{print $NF}'|sed 's/\"//g'|head -1)
 	[ -z "$sh_new_ver" ] && echo -e "$error 无法链接到 Github !" && exit 1
 	wget --no-check-certificate https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrmu.init -qO /etc/init.d/ssrmu
@@ -1493,6 +1517,7 @@ UpdateShell(){
 }
 
 Menu(){
+	[ ! -e "$SH_FILE" ] && wget --no-check-certificate "https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrmu.sh" -qO "$SH_FILE" && chmod +x "$SH_FILE"
 	echo -e "  ShadowsocksR MuJSON一键管理脚本 ${red}[v$sh_ver]$plain
   ---- Toyo | Rewriting by MTimer ----
 
@@ -1513,7 +1538,8 @@ Menu(){
 ————————————
  ${green}13.$plain 其他功能
  ${green}14.$plain 升级脚本
- "
+
+ $tip 输入: ssr 打开此面板" && echo
 	PID=$(pgrep -f "server.py")
 	if [ -d "$SSR_PATH" ]; then
 		if [ -n "$PID" ]; then
@@ -1528,8 +1554,8 @@ Menu(){
 			echo -e " 当前状态: $red未安装$plain"
 		fi
 	fi
-	echo && read -p "请输入数字 [1-15]：" choose
-	case "$choose" in
+	echo && read -p "请输入数字 [1-15]：" menu_num
+	case "$menu_num" in
 		1) InstallSsrMenu
 		;;
 		2) UninstallSsr
@@ -1556,7 +1582,7 @@ Menu(){
 		;;
 		13) OtherFunctions
 		;;
-		14) UpdateShell
+		14) UpdateScript
 		;;
 		*)
 		echo -e "$error 请输入正确的数字 [1-15]"
