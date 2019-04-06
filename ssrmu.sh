@@ -577,9 +577,7 @@ AddIptables(){
         default_zone=$(firewall-cmd --get-default-zone)
         firewall-cmd --permanent --zone="$default_zone" --add-port="$acc_port/tcp"
         firewall-cmd --permanent --zone="$default_zone" --add-port="$acc_port/udp"
-        if systemctl status firewalld > /dev/null 2>&1; then #running
-            firewall-cmd --reload
-        fi
+        firewall-cmd --reload || true
     elif iptables -h > /dev/null 2>&1; then
         iptables -I INPUT -m state --state NEW -m tcp -p tcp --dport "$acc_port" -j ACCEPT
         iptables -I INPUT -m state --state NEW -m udp -p udp --dport "$acc_port" -j ACCEPT
@@ -605,9 +603,7 @@ DelIptables(){
         default_zone=$(firewall-cmd --get-default-zone)
         firewall-cmd --permanent --zone="$default_zone" --remove-port="$acc_port/tcp"
         firewall-cmd --permanent --zone="$default_zone" --remove-port="$acc_port/udp"
-        if systemctl status firewalld > /dev/null 2>&1; then #running
-            firewall-cmd --reload
-        fi
+        firewall-cmd --reload || true
     elif iptables -h > /dev/null 2>&1; then
         iptables -D INPUT -m state --state NEW -m tcp -p tcp --dport "$acc_port" -j ACCEPT
         iptables -D INPUT -m state --state NEW -m udp -p udp --dport "$acc_port" -j ACCEPT
