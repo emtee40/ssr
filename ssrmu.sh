@@ -690,9 +690,18 @@ GetAccInfo(){
     acc_d_text=$(numfmt --to=iec --suffix=B "$acc_d_byte")
     acc_u_text=$(numfmt --to=iec --suffix=B "$acc_u_byte")
     acc_speed_con_byte=$(numfmt --from=iec "$acc_speed_con"K)
-    acc_speed_con_text=$(numfmt --to=iec --suffix=B "$acc_speed_con_byte")"/s"
+    if [ "$acc_speed_con" == "0" ]; then
+        acc_speed_con_text="无限"
+    else
+        acc_speed_con_text=$(numfmt --to=iec --suffix=B "$acc_speed_con_byte")"/s"
+    fi
     acc_speed_user_byte=$(numfmt --from=iec "$acc_speed_user"K)
-    acc_speed_user_text=$(numfmt --to=iec --suffix=B "$acc_speed_user_byte")"/s"
+    if [ "$acc_speed_user" == "0" ]; then
+        acc_speed_user_text="无限"
+    else
+        acc_speed_user_text=$(numfmt --to=iec --suffix=B "$acc_speed_user_byte")"/s"
+    fi
+    acc_forbidden_port_text=$acc_forbidden_port
     acc_transfer_used_text=$(numfmt --to=iec --suffix=B "$acc_transfer_used")
     acc_transfer_left_text=$(numfmt --to=iec --suffix=B "$acc_transfer_left")
     acc_transfer_enable_text=$(numfmt --to=iec --suffix=B "$acc_transfer_enable")
