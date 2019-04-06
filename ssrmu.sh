@@ -108,9 +108,14 @@ ChangeDate(){
 
 RestartCron(){
     case "$release" in
-        "rpm") /etc/sbin/crond restart
+        "rpm")
+            if [ "$release_ver_main" == "7" ]; then
+                systemctl restart crond.service
+            else
+                /etc/init.d/crond restart
+            fi
         ;;
-        "deb"|"ubu") /etc/sbin/cron restart
+        "deb"|"ubu") /etc/init.d/cron restart
         ;;
         *) echo "$error 重启cron发生错误!"
         ;;
