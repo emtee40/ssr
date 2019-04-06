@@ -110,7 +110,7 @@ RestartCron(){
 	case "$release" in
 		"rpm") /etc/init.d/crond restart
 		;;
-		"deb") /etc/init.d/cron restart
+		"deb"|"ubu") /etc/init.d/cron restart
 		;;
 		*) echo "$error 重启cron发生错误!"
 		;;
@@ -142,7 +142,7 @@ InstallSsr(){
                 chkconfig --add ssrmu
                 chkconfig ssrmu on
             ;;
-            "deb")
+            "deb"|"ubu")
                 update-rc.d -f ssrmu defaults
             ;;
             *) echo -e "$error 系统不支持 !" && exit 1
