@@ -234,7 +234,7 @@ F G H J K L Z X C V B N M
         while [ $name_len -lt $name_size ]; do
             name_index=$((RANDOM%name_array_size))
             acc_user="$acc_user${name_array[$name_index]}"
-            ((name_len++))
+            name_len=$((name_len+1))
         done
         acc_info=$($JQ_FILE '.[]|select(.user=="'"$acc_user"'")' $MUDB_FILE)
         if [ -z "$acc_info" ]; then
@@ -289,7 +289,6 @@ SetAccPort(){
                         if ss -lpn | grep -q ":$acc_port "; then
                             echo -e "$error 端口已被其他程序占用！请重新输入！ "
                         else
-                            echo && echo $separator && echo -e "	端口: $green $acc_port $plain" && echo $separator && echo
                             break
                         fi
                     else
@@ -301,6 +300,7 @@ SetAccPort(){
             ;;
         esac
     done
+    echo && echo $separator && echo -e "	端口: $green $acc_port $plain" && echo $separator && echo
 }
 
 RandPasswd(){
@@ -315,7 +315,7 @@ F G H J K L Z X C V B N M ! @
     while [ $pass_len -lt $pass_size ]; do
         pass_index=$((RANDOM%pass_array_size))
         acc_passwd="$acc_passwd${pass_array[$pass_index]}"
-        ((pass_len++))
+        pass_len=$((pass_len+1))
     done
 }
 
