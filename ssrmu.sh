@@ -17,7 +17,6 @@ jq_ver="1.6"
 libso_ver_default="1.0.17"
 SH_FILE="/usr/local/bin/ssr"
 SSR_PATH="/usr/local/shadowsocksr"
-CONFIG_FILE="$SSR_PATH/config.json"
 USERMYSQL_FILE="$SSR_PATH/usermysql.json"
 USER_CONFIG_FILE="$SSR_PATH/user-config.json"
 USER_API_CONFIG_FILE="$SSR_PATH/userapiconfig.py"
@@ -78,12 +77,20 @@ CheckRelease()
 			case "$release" in
 				"rpm")
 					if [ "$depend" != "cron" ]; then
-						yum -y install "$depend" >/dev/null 2>&1
+						if yum -y install "$depend" >/dev/null 2>&1; then
+							echo -e "$error 依赖 $depend 安装成功..."
+						else
+							echo -e "$error 依赖 $depend 安装失败..." && exit 1
+						fi
 					fi
 				;;
 				"deb"|"ubu")
 					if [ "$depend" != "crond" ]; then
-						apt-get -y install "$depend" >/dev/null 2>&1
+						if apt-get -y install "$depend" >/dev/null 2>&1; then
+							echo -e "$error 依赖 $depend 安装成功..."
+						else
+							echo -e "$error 依赖 $depend 安装失败..." && exit 1
+						fi
 					fi
 				;;
 				*) echo -e "\n系统不支持!" && exit 1
@@ -92,11 +99,6 @@ CheckRelease()
 			
 		fi
 	done
-
-	[ -z "$(command -v wget || true)" ] && echo -e "$error 依赖 wget 安装失败..." && exit 1
-	[ -z "$(command -v unzip || true)" ] && echo -e "$error 依赖 unzip 安装失败..." && exit 1
-	[ -z "$(command -v curl || true)" ] && echo -e "$error 依赖 curl 安装失败..." && exit 1
-	[ ! -e /usr/sbin/cron ] && [ ! -e /usr/sbin/crond ] && echo -e "$error 依赖 cron 安装失败..." && exit 1
 }
 
 ChangeDate(){
@@ -124,7 +126,7 @@ InstallSsr(){
 	mv "./shadowsocksr-manyuser" "$SSR_PATH"
 	[ ! -d "$SSR_PATH" ] && echo -e "$error 移动 ShadowsocksR服务端 失败 !" && exit 1
 
-	cp "$SSR_PATH/config.json" "$CONFIG_FILE"
+	cp "$SSR_PATH/config.json" "$USER_CONFIG_FILE"
 	cp "$SSR_PATH/mysql.json" "$USERMYSQL_FILE"
 	cp "$SSR_PATH/apiconfig.py" "$USER_API_CONFIG_FILE"
 	[ ! -e "$USER_API_CONFIG_FILE" ] && echo -e "$error ShadowsocksR服务端 apiconfig.py 复制失败 !" && exit 1
