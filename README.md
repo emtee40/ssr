@@ -9,7 +9,7 @@
 - 扩展 ...
 
 ``` bash
-wget -N --no-check-certificate https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrmu.sh && chmod +x ssrmu.sh && bash ssrmu.sh
+wget -N --no-check-certificate https://raw.githubusercontent.com/woniuzfb/ssr/master/ssrmu.sh && chmod +x ssrmu.sh && bash ssrmu.sh
 ```
 
 ---
@@ -21,7 +21,7 @@ wget -N --no-check-certificate https://raw.githubusercontent.com/woniuzfb/doubi/
 - 扩展 ...
 
 ``` bash
-wget -N --no-check-certificate https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrstatus.sh && chmod +x ssrstatus.sh && bash ssrstatus.sh
+wget -N --no-check-certificate https://raw.githubusercontent.com/woniuzfb/ssr/master/ssrstatus.sh && chmod +x ssrstatus.sh && bash ssrstatus.sh
 ```
 
 ---

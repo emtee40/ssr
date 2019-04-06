@@ -688,7 +688,7 @@ InstallCaddy(){
 	if [[ "$install_caddy_yn" == [Yy] ]]; then
 		SetServerName
 		SetServerPort
-		wget -qO --no-check-certificate https://raw.githubusercontent.com/woniuzfb/doubi/master/caddy_install.sh
+		wget -qO --no-check-certificate https://raw.githubusercontent.com/woniuzfb/ssr/master/caddy_install.sh
 		chmod +x caddy_install.sh
 		bash caddy_install.sh install
 		[ ! -e "$SSRSTATUS_PATH/caddy" ] && echo -e "$error Caddy安装失败，请手动部署，Web网页文件位置：$SSRSTATUS_PATH" && exit 1
@@ -707,7 +707,7 @@ InstallCaddy(){
 }
 
 DownloadStatus(){
-	wget --no-check-certificate -qO "https://github.com/woniuzfb/doubi/archive/master.zip"
+	wget --no-check-certificate -qO "https://github.com/woniuzfb/ssr/archive/master.zip"
 	[ ! -e "./master.zip" ] && echo -e "$error SSRStatus 网页文件下载失败 !" && exit 1
 	unzip "./master.zip" && rm -rf "./master.zip"
 	[ ! -e "./doubi-master" ] && echo -e "$error SSRStatus 网页文件解压失败 !" && exit 1
@@ -747,14 +747,14 @@ UninstallStatus(){
 }
 
 UpdateShell(){
-	sh_new_ver=$(wget --no-check-certificate -qO- -t1 -T3 "https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrstatus.sh"|grep 'sh_ver="'|awk -F "=" '{print $NF}'|sed 's/\"//g'|head -1)
+	sh_new_ver=$(wget --no-check-certificate -qO- -t1 -T3 "https://raw.githubusercontent.com/woniuzfb/ssr/master/ssrstatus.sh"|grep 'sh_ver="'|awk -F "=" '{print $NF}'|sed 's/\"//g'|head -1)
 	[ -z "$sh_new_ver" ] && echo -e "$error 无法链接到 Github !" && exit 1
-	wget --no-check-certificate -qO "$SH_FILE" "https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrstatus.sh" && chmod +x "$SH_FILE"
+	wget --no-check-certificate -qO "$SH_FILE" "https://raw.githubusercontent.com/woniuzfb/ssr/master/ssrstatus.sh" && chmod +x "$SH_FILE"
 	echo -e "脚本已更新为最新版本[ $sh_new_ver ] !(输入: ssrs 使用)" && exit 0
 }
 
 Menu(){
-	[ -e "$SH_FILE" ] && wget --no-check-certificate -qO "$SH_FILE" "https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrstatus.sh" && chmod +x "$SH_FILE"
+	[ -e "$SH_FILE" ] && wget --no-check-certificate -qO "$SH_FILE" "https://raw.githubusercontent.com/woniuzfb/ssr/master/ssrstatus.sh" && chmod +x "$SH_FILE"
 	echo && echo -e "  SSRStatus 一键安装管理脚本 ${red}[v$sh_ver]$plain
 	-- Toyo | rewriting by MTimer --
 	

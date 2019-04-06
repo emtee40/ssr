@@ -135,7 +135,7 @@ InstallSsr(){
     sed -i 's/ \/\/ only works under multi-user mode//g' "$USER_CONFIG_FILE"
     echo -e "$info ShadowsocksR服务端 下载完成 !"
 
-    if wget --no-check-certificate https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrmu.init -qO /etc/init.d/ssrmu; then
+    if wget --no-check-certificate https://raw.githubusercontent.com/woniuzfb/ssr/master/ssrmu.init -qO /etc/init.d/ssrmu; then
         chmod +x /etc/init.d/ssrmu
         case "$release" in
             "rpm")
@@ -785,7 +785,7 @@ DownInit(){
     if [ -d "$SSR_PATH" ]; then
         if [ ! -e "/etc/init.d/ssrmu" ]; then
             echo -e "$info 正在下载 ssrmu.init..."
-            wget --no-check-certificate https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrmu.init -qO /etc/init.d/ssrmu
+            wget --no-check-certificate https://raw.githubusercontent.com/woniuzfb/ssr/master/ssrmu.init -qO /etc/init.d/ssrmu
             chmod +x /etc/init.d/ssrmu
         fi
     else
@@ -1590,15 +1590,15 @@ OtherFunctions(){
 }
 
 UpdateScript(){
-    sh_new_ver=$(wget --no-check-certificate -qO- -t1 -T3 "https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrmu.sh"|grep 'sh_ver="'|awk -F "=" '{print $NF}'|sed 's/\"//g'|head -1)
+    sh_new_ver=$(wget --no-check-certificate -qO- -t1 -T3 "https://raw.githubusercontent.com/woniuzfb/ssr/master/ssrmu.sh"|grep 'sh_ver="'|awk -F "=" '{print $NF}'|sed 's/\"//g'|head -1)
     [ -z "$sh_new_ver" ] && echo -e "$error 无法链接到 Github !" && exit 1
-    wget --no-check-certificate "https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrmu.init" -qO /etc/init.d/ssrmu
-    wget --no-check-certificate "https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrmu.sh" -qO "$SH_FILE" && chmod +x "$SH_FILE"
+    wget --no-check-certificate "https://raw.githubusercontent.com/woniuzfb/ssr/master/ssrmu.init" -qO /etc/init.d/ssrmu
+    wget --no-check-certificate "https://raw.githubusercontent.com/woniuzfb/ssr/master/ssrmu.sh" -qO "$SH_FILE" && chmod +x "$SH_FILE"
     echo -e "脚本已更新为最新版本[ $sh_new_ver ] !(输入: ssr 使用)" && exit 0
 }
 
 Menu(){
-    [ ! -e "$SH_FILE" ] && wget --no-check-certificate "https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrmu.sh" -qO "$SH_FILE" && chmod +x "$SH_FILE"
+    [ ! -e "$SH_FILE" ] && wget --no-check-certificate "https://raw.githubusercontent.com/woniuzfb/ssr/master/ssrmu.sh" -qO "$SH_FILE" && chmod +x "$SH_FILE"
     echo -e "  ShadowsocksR MuJSON一键管理脚本 ${red}[v$sh_ver]$plain
   ---- Toyo | Rewriting by MTimer ----
 
