@@ -931,6 +931,7 @@ ViewConnection(){
 }
 
 ReadAccPort(){
+    ListAccs
     echo -e "请输入用户 端口"
     while read -p "(默认: 取消):" acc_port; do
         [ -z "$acc_port" ] && echo -e "已取消..." && exit 1
@@ -1265,7 +1266,6 @@ ClearTransferSetCron(){
 }
 
 ClearTransferOne(){
-    List_port_user
     ReadAccPort
     cd "$SSR_PATH"
     if python mujson_mgr.py -c -p "$acc_port"|grep -q "clear user "; then

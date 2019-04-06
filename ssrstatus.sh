@@ -756,7 +756,7 @@ UpdateShell(){
 Menu(){
 	[ -e "$SH_FILE" ] && wget --no-check-certificate -qO "$SH_FILE" "https://raw.githubusercontent.com/woniuzfb/ssr/master/ssrstatus.sh" && chmod +x "$SH_FILE"
 	echo && echo -e "  SSRStatus 一键安装管理脚本 ${red}[v$sh_ver]$plain
-	-- Toyo | rewriting by MTimer --
+	-- Toyo | Rewriting by MTimer --
 	
 	${green}0.$plain 升级脚本
 	————————————
