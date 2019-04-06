@@ -9,19 +9,19 @@
 - 扩展 ...
 
 ``` bash
-wget -N --no-check-certificate https://raw.githubusercontent.com/woniuzfb/ssr/master/ssrmu.sh && chmod +x ssrmu.sh && bash ssrmu.sh
+wget -N --no-check-certificate https://raw.githubusercontent.com/woniuzfb/ssr/master/ssrmu.sh && bash ssrmu.sh
 ```
 
 ---
 
-## ssrstatus.sh
+## ssrstatus.sh 勿用
 
-- 重写 √
-- 修复 .
+- 重写 .
+- 修复 ..
 - 扩展 ...
 
 ``` bash
-wget -N --no-check-certificate https://raw.githubusercontent.com/woniuzfb/ssr/master/ssrstatus.sh && chmod +x ssrstatus.sh && bash ssrstatus.sh
+wget -N --no-check-certificate https://raw.githubusercontent.com/woniuzfb/ssr/master/ssrstatus.sh && bash ssrstatus.sh
 ```
 
 ---
