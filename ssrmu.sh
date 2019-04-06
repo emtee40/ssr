@@ -655,7 +655,7 @@ ListAccs(){
     accs_list=""
     accs_transfer_used=0
     for((index = 0; index < "$accs_count"; index++)); do
-        acc_transfer_used=$(((accs_d[index]+accs_u[index])*1024))
+        acc_transfer_used=$((accs_d[index]+accs_u[index]))
         acc_transfer_used_text=$(numfmt --to=iec --suffix=B "$acc_transfer_used")
         acc_transfer_left=$((accs_transfer_enable[index]-acc_transfer_used))
         acc_transfer_left_text=$(numfmt --to=iec --suffix=B "$acc_transfer_left")
@@ -683,12 +683,10 @@ GetAccInfo(){
     acc_protocol=${acc_protocol//\'/}
     acc_protocol_param=${acc_protocol_param//\'/}
     acc_user=${acc_user//\'/}
-    acc_transfer_used=$(((acc_d+accs_u)*1024))
+    acc_transfer_used=$(((acc_d+accs_u)))
     acc_transfer_left=$((acc_transfer_enable-acc_transfer_used))
-    acc_d_byte=$((acc_d*1024))
-    acc_u_byte=$((acc_u*1024))
-    acc_d_text=$(numfmt --to=iec --suffix=B "$acc_d_byte")
-    acc_u_text=$(numfmt --to=iec --suffix=B "$acc_u_byte")
+    acc_d_text=$(numfmt --to=iec --suffix=B "$acc_d")
+    acc_u_text=$(numfmt --to=iec --suffix=B "$acc_u")
     acc_speed_con_byte=$(numfmt --from=iec "$acc_speed_con"K)
     if [ "$acc_speed_con" == "0" ]; then
         acc_speed_con_text="无限"
