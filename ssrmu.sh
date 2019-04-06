@@ -96,7 +96,6 @@ CheckRelease()
 	[ ! "$(wget -V)" ] && echo -e "$error 依赖 wget 安装失败..." && exit 1
 	[ ! "$(unzip -v)" ] && echo -e "$error 依赖 unzip 安装失败..." && exit 1
 	[ ! "$(curl -V)" ] && echo -e "$error 依赖 curl 安装失败..." && exit 1
-	[ ! "$(ls /usr/sbin/cron*)" ] && echo -e "$error 依赖 cron 安装失败..." && exit 1
 }
 
 ChangeDate(){
