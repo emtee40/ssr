@@ -484,6 +484,7 @@ SetAccSpeedCon(){
         esac
     done
     if [ -z "$acc_speed_con" ]; then
+        acc_speed_con=0
         acc_speed_con_text="无限"
     else
         acc_speed_con_byte=$(numfmt --from=iec "$acc_speed_con"K)
@@ -513,6 +514,7 @@ SetAccSpeedUser(){
         esac
     done
     if [ -z "$acc_speed_user" ]; then
+        acc_speed_user=0
         acc_speed_user_text="无限"
     else
         acc_speed_user_byte=$(numfmt --from=iec "$acc_speed_user"K)
@@ -732,12 +734,8 @@ AddAcc(){
     SetAccSpeedUser
     SetAccTransfer
     SetAccForbid
-    limit_option=""
-    [ -n "$acc_speed_con" ] && limit_option="-s $acc_speed_con"
-    [ -n "$acc_speed_user" ] && limit_option="$limit_option -S $acc_speed_user"
-    [ -n "$acc_forbidden_port" ] && limit_option="$limit_option -f $acc_forbidden_port"
     cd "$SSR_PATH"
-    if python mujson_mgr.py -a -u "$acc_user" -p "$acc_port" -k "$acc_passwd" -m "$acc_method" -O "$acc_protocol" -G "$acc_protocol_param" -o "$acc_obfs" -g "$acc_obfs_param" -t "$acc_transfer" "$limit_option"|grep -q "add user info"; then
+    if python mujson_mgr.py -a -u "$acc_user" -p "$acc_port" -k "$acc_passwd" -m "$acc_method" -O "$acc_protocol" -G "$acc_protocol_param" -o "$acc_obfs" -g "$acc_obfs_param" -s "$acc_speed_con" -S "$acc_speed_user" -t "$acc_transfer" -f "$acc_forbidden_port"|grep -q "add user info"; then
         echo -e "$info 用户添加成功! " && echo
     else
         echo -e "$error 用户添加失败 ${green}[用户名: $acc_user , 端口: $acc_port]$plain "
