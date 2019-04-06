@@ -1320,7 +1320,7 @@ InstallServerSpeeder(){
 	[ ! -e "/tmp/serverspeeder.sh" ] && echo -e "$error 锐速安装脚本下载失败 !" && exit 1
 	bash /tmp/serverspeeder.sh
 	sleep 2s
-	PID=$(pgrep -f serverspeeder)
+	PID=$(pgrep -f serverspeeder || true)
 	if [ -n "$PID" ]; then
 		rm -rf /tmp/serverspeeder.sh
 		rm -rf /tmp/91yunserverspeeder
@@ -1380,7 +1380,7 @@ InstallLotServer(){
 	[ ! -e "/tmp/appex.sh" ] && echo -e "$error LotServer 安装脚本下载失败 !" && exit 1
 	bash /tmp/appex.sh install
 	sleep 2s
-	PID=$(pgrep -f appex)
+	PID=$(pgrep -f appex || true)
 	if [ -n "$PID" ]; then
 		echo -e "$info LotServer 安装完成 !" && exit 1
 	else
@@ -1540,7 +1540,7 @@ Menu(){
  ${green}14.$plain 升级脚本
 
  $tip 输入: ssr 打开此面板" && echo
-	PID=$(pgrep -f "server.py")
+	PID=$(pgrep -f "server.py" || true)
 	if [ -d "$SSR_PATH" ]; then
 		if [ -n "$PID" ]; then
 			echo -e " 当前状态: $green已安装$plain 并 $green已启动$plain"
@@ -1590,7 +1590,7 @@ Menu(){
 	esac
 }
 
-action=$1
+action=$*
 case "$action" in
 	"clearall") ClearTransferAll
 	;;
