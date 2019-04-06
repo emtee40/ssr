@@ -840,7 +840,7 @@ ViewAccMenu(){
                 if [ -n "$($JQ_FILE '.[] | select(.port=='"$acc_port"')' $MUDB_FILE)" ]; then
                     break;
                 else
-                    echo -e "$error 账号不存在！"
+                    echo -e "$error 请输入正确的端口！"
                 fi
             ;;
         esac
@@ -1102,12 +1102,12 @@ ConfigAccStatus(){
         ;;
     esac
 
-    echo -e "端口 [$acc_port] 的账号状态为：$green$acc_status_old$plain , 是否切换为 $red$acc_status_new$plain ?[Y/n]"
-    read -p "(默认: Y):" acc_status_num
-    [ -z "$acc_status_num" ] && acc_status_num="Y"
+    echo -e "端口 [$acc_port] 的账号状态为：$green$acc_status_old$plain , 是否切换为 $red$acc_status_new$plain ?[y/N]"
+    read -p "(默认: y):" acc_status_num
+    [ -z "$acc_status_num" ] && acc_status_num="y"
     if [[ "$acc_status_num" == [Yy] ]]; then
         case $acc_enable in
-            1) echo
+            1) echo && acc_transfer_enable=$((acc_u+acc_d))
             ;;
             0) echo && SetAccTransfer
             ;;
@@ -1121,7 +1121,7 @@ ${green}2.$plain  重新设置账号流量"
                     1)
                         acc_u_new=$acc_u
                         acc_d_new=$acc_d
-                        acc_transfer_enable=$((acc_enable-1))
+                        acc_transfer_enable=$((acc_enable-1+acc_u+acc_d))
                     ;;
                     2)
                         acc_u_new=0
