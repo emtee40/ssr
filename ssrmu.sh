@@ -359,7 +359,7 @@ SetAccMethod(){
         aes-256-cfb  aes-128-cfb8 aes-192-cfb8 aes-256-cfb8 
         salsa20 chacha20 chacha20-ietf 
     )
-    if [ -z "$acc_method" ]; then
+    if [ -z "$acc_method_number" ]; then
         acc_method=${acc_method_array[9]}
     else
         acc_method=${acc_method_array["$acc_method_number" - 1]}
