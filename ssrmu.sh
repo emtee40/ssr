@@ -359,8 +359,11 @@ SetAccMethod(){
         aes-256-cfb  aes-128-cfb8 aes-192-cfb8 aes-256-cfb8 
         salsa20 chacha20 chacha20-ietf 
     )
-    acc_method=${acc_method_array["$acc_method_number" - 1]}
-    [ -z "$acc_method" ] && acc_method=${acc_method_array[9]}
+    if [ -z "$acc_method" ]; then
+        acc_method=${acc_method_array[9]}
+    else
+        acc_method=${acc_method_array["$acc_method_number" - 1]}
+    fi
     echo && echo "$separator" && echo -e "	加密 : $green$acc_method$plain" && echo "$separator" && echo
 }
 
