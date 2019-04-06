@@ -71,14 +71,20 @@ CheckRelease()
 		release_bit="32"
 	fi
 
-	depends=(wget unzip vim curl crond python)
+	depends=(wget unzip vim curl cron crond python)
 	for depend in "${depends[@]}"; do
 		DEPEND_PATH="$(command -v "$depend" || true)"
 		if [ -z "$DEPEND_PATH" ]; then
 			case "$release" in
-				"rpm") yum -y install "$depend" >/dev/null 2>&1
+				"rpm")
+					if [ "$depend" != "cron" ]; then
+						yum -y install "$depend" >/dev/null 2>&1
+					fi
 				;;
-				"deb"|"ubu") apt-get -y install "$depend" >/dev/null 2>&1
+				"deb"|"ubu")
+					if [ "$depend" != "crond" ]; then
+						apt-get -y install "$depend" >/dev/null 2>&1
+					fi
 				;;
 				*) echo -e "\n系统不支持!" && exit 1
 				;;
