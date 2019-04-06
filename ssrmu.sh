@@ -925,7 +925,7 @@ ViewConnection(){
             accs_ip_count=$((accs_ip_count+acc_ip_count))
             accs_list=${accs_list}"#$((index+1)) 用户名: $green$acc_user$plain\t 端口: $green$acc_port$plain\t 链接IP总数: $green$acc_ip_count$plain\t 当前链接IP: $green$acc_ip$plain\n"
         done
-        echo -e "用户总数: $green_background $accs_count $plain 链接IP总数: $green_background $accs_ip_count $plain "
+        echo -e "用户总数: $green $accs_count $plain 链接IP总数: $green $accs_ip_count $plain "
         echo -e "$accs_list"
     fi
 }
@@ -1507,7 +1507,7 @@ ConfigVerboseLog(){
     RestartSsr
 }
 
-View_Log(){
+ViewLog(){
     [ ! -e $SSR_LOG_FILE ] && echo -e "$error ShadowsocksR日志文件不存在 !" && exit 1
     echo && echo -e "$tip 按 ${red}Ctrl+C$plain 终止查看日志" && echo -e "如果需要查看完整日志内容，请用 ${red}cat $SSR_LOG_FILE$plain 命令。" && echo
     tail -f "$SSR_LOG_FILE"
