@@ -119,7 +119,7 @@ RestartCron(){
 
 InstallSsr(){
     echo -e "$info 开始下载/安装 ShadowsocksR文件..."
-    wget --no-check-certificate "https://github.com/woniuzfb/shadowsocksr/archive/manyuser.zip" -qO manyuser.zip
+    wget --no-check-certificate "https://github.com/woniuzfb/ssr/archive/manyuser.zip" -qO manyuser.zip
     [ ! -e "./manyuser.zip" ] && echo -e "$error ShadowsocksR服务端 压缩包 下载失败 !" && exit 1
     unzip "./manyuser.zip" >/dev/null 2>&1 && rm -rf "./manyuser.zip"
     [ ! -e "./shadowsocksr-manyuser/" ] && echo -e "$error ShadowsocksR服务端 解压失败 !" && exit 1
