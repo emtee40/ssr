@@ -386,8 +386,11 @@ SetAccProtocol(){
         auth_chain_a
         auth_chain_b
     )
-    acc_protocol=${protocol_array["$protocol_number" - 1]}
-    [ -z "$acc_protocol" ] && acc_protocol=${protocol_array[3]}
+    if [ -z "$protocol_number" ]; then
+        acc_protocol=${protocol_array[3]}
+    else
+        acc_protocol=${protocol_array["$protocol_number" - 1]}
+    fi
     if [ "$acc_protocol" == "auth_sha1_v4" ]; then
         read -p "是否设置 协议插件兼容原版(_compatible)？[Y/n 默认否]" protocol_yn
         [ -z "$protocol_yn" ] && protocol_yn="n"
@@ -440,8 +443,11 @@ SetAccObfs(){
         random_head 
         tls1.2_ticket_auth
     )
-    acc_obfs=${obfs_array["$obfs_number" - 1]}
-    [ -z "$acc_obfs" ] && acc_obfs=${obfs_array[4]}
+    if [ -z "$obfs_number" ]; then
+        acc_obfs=${obfs_array[4]}
+    else
+        acc_obfs=${obfs_array["$obfs_number" - 1]}
+    fi
     if [ "$acc_obfs" != "plain" ]; then
         read -p "是否设置 混淆插件兼容原版(_compatible)？[Y/n 默认否]" obfs_compa_yn
         [ -z "$obfs_compa_yn" ] && obfs_compa_yn="n"
