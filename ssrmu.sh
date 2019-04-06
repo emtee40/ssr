@@ -1140,6 +1140,7 @@ ${green}2.$plain  重新设置账号流量"
         echo "已取消..." && exit 1
     fi
     echo && echo "操作成功..."
+    GetAccInfo
     SsSsrLink
     ViewAccInfo
 }
