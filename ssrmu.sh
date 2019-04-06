@@ -78,7 +78,7 @@ CheckRelease()
                 "rpm")
                     if [ "$depend" != "cron" ]; then
                         if yum -y install "$depend" >/dev/null 2>&1; then
-                            echo -e "$error 依赖 $depend 安装成功..."
+                            echo -e "$info 依赖 $depend 安装成功..."
                         else
                             echo -e "$error 依赖 $depend 安装失败..." && exit 1
                         fi
@@ -87,7 +87,7 @@ CheckRelease()
                 "deb"|"ubu")
                     if [ "$depend" != "crond" ]; then
                         if apt-get -y install "$depend" >/dev/null 2>&1; then
-                            echo -e "$error 依赖 $depend 安装成功..."
+                            echo -e "$info 依赖 $depend 安装成功..."
                         else
                             echo -e "$error 依赖 $depend 安装失败..." && exit 1
                         fi
@@ -108,9 +108,9 @@ ChangeDate(){
 
 RestartCron(){
     case "$release" in
-        "rpm") /etc/init.d/crond restart
+        "rpm") /etc/sbin/crond restart
         ;;
-        "deb"|"ubu") /etc/init.d/cron restart
+        "deb"|"ubu") /etc/sbin/cron restart
         ;;
         *) echo "$error 重启cron发生错误!"
         ;;
