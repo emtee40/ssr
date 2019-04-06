@@ -541,12 +541,16 @@ SetAccTransfer(){
         esac
     done
     if [ "$acc_transfer" == "838868" ]; then
-        acc_transfer_text="无限"
+        acc_transfer_enable_text="无限"
     else
         acc_transfer_enable=$(numfmt --from=iec "$acc_transfer"G)
-        acc_transfer_text=$(numfmt --to=iec "$acc_transfer_enable")
+        acc_transfer_enable_text=$(numfmt --to=iec "$acc_transfer_enable")
     fi
-    echo && echo "$separator" && echo -e "	用户总限速 : $green$acc_transfer_text$plain" && echo "$separator" && echo
+    acc_u_text="0B"
+    acc_d_text="0B"
+    acc_transfer_used_text="0B"
+    acc_transfer_left_text=$acc_transfer_enable_text
+    echo && echo "$separator" && echo -e "	用户总限速 : $green$acc_transfer_enable_text$plain" && echo "$separator" && echo
 }
 
 SetAccForbid(){
