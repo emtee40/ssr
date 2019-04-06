@@ -1078,8 +1078,8 @@ ConfigAccPort(){
 ConfigAccStatus(){
     case $acc_enable in
         1)
-            acc_status_old="启用"
-            acc_status_new="禁用"
+            acc_status_old="$green启用$plain"
+            acc_status_new="$red禁用$plain"
             acc_u_new=$acc_u
             acc_d_new=$acc_d
             if [ $acc_transfer_left -gt 0 ]; then
@@ -1089,20 +1089,19 @@ ConfigAccStatus(){
             fi
         ;;
         0)
-            acc_status_old="禁用"
-            acc_status_new="启用"
+            acc_status_old="$red禁用$plain"
+            acc_status_new="$green启用$plain"
             acc_enable_new=1
             acc_u_new=0
             acc_d_new=0
         ;;
         *)
-            acc_status_old="禁用"
-            acc_status_new="启用"
+            acc_status_old="$red禁用$plain"
+            acc_status_new="$green启用$plain"
             acc_enable_new=1
         ;;
     esac
-
-    echo -e "端口 [$acc_port] 的账号状态为：$green$acc_status_old$plain , 是否切换为 $red$acc_status_new$plain ?[y/N]"
+    echo -e "端口 [$acc_port] 的账号状态为：$acc_status_old , 是否切换为 $acc_status_new ?[y/N]"
     read -p "(默认: y):" acc_status_num
     [ -z "$acc_status_num" ] && acc_status_num="y"
     if [[ "$acc_status_num" == [Yy] ]]; then
