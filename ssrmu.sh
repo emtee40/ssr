@@ -37,7 +37,7 @@ error="${red}[错误]$plain"
 tip="${green}[注意]$plain"
 separator="——————————————————————————————"
 
-[ $EUID -ne 0 ] && echo -e "[$error] 当前账号非ROOT(或没有ROOT权限),无法继续操作,请使用$green_background sudo su $plain来获取临时ROOT权限（执行后会提示输入当前账号的密码）." && exit 1
+[ $EUID -ne 0 ] && echo -e "[$error] 当前账号非ROOT(或没有ROOT权限),无法继续操作,请使用$green sudo su $plain来获取临时ROOT权限（执行后会提示输入当前账号的密码）." && exit 1
 
 CheckRelease()
 {
@@ -664,9 +664,9 @@ ListAccs(){
         accs_list=$accs_list"#$((index+1)) 用户名: $green${accs_user[index]}$plain\t 端口: $green${accs_port[index]}$plain\t 流量使用情况(已用+剩余=总): $green$acc_transfer_used_text$plain + $green$acc_transfer_left_text$plain = $green$acc_transfer_enable_text$plain\n"
     done
     accs_transfer_used_text=$(numfmt --to=iec --suffix=B "$accs_transfer_used")
-    echo && echo -e "=== 用户总数 $green_background $accs_count $plain"
+    echo && echo -e "=== 用户总数 $green $accs_count $plain"
     echo -e "$accs_list"
-    echo -e "=== 当前所有用户已使用流量总和: $green_background $accs_transfer_used_text $plain\n"
+    echo -e "=== 当前所有用户已使用流量总和: $green $accs_transfer_used_text $plain\n"
 }
 
 GetAccInfo(){
@@ -908,7 +908,7 @@ ViewConnection(){
         accs_list=""
         accs_ip_count=0
         for((index=0;index<accs_count;index++)); do
-            acc_user="${accs_port[index]}"
+            acc_user="${accs_user[index]}"
             acc_port="${accs_port[index]}"
             acc_ip=$(ss -taH state established '( sport = :'"$acc_port"' )' |awk '{print $4}'|grep -E -o "([0-9]{1,3}[\.]){3}[0-9]{1,3}"|sort -u|grep -v 'Segmentation fault' || true)
             if [ "$view_con_num" == "2" ]; then
