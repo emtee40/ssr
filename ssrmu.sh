@@ -201,9 +201,9 @@ InstallJq(){
 
 GetServerIp(){
     server_ip=$( ip addr | grep -E -o '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | grep -E -v "^192\.168|^172\.1[6-9]\.|^172\.2[0-9]\.|^172\.3[0-2]\.|^10\.|^127\.|^255\.|^0\." | head -n 1 )
-    [ -z "$server_ip" ] && server_ip=$( wget -qO- -t1 -T2 ipv4.icanhazip.com )
-    [ -z "$server_ip" ] && server_ip=$( wget -qO- -t1 -T2 ipinfo.io/ip )
-	[ -z "$server_ip" ] && server_ip=$( wget -qO- -t1 -T2 api.ip.sb/ip )
+    [ -z "$server_ip" ] && server_ip="$(wget -qO- -t1 -T2 ipv4.icanhazip.com)"
+    [ -z "$server_ip" ] && server_ip="$(wget -qO- -t1 -T2 ipinfo.io/ip)"
+	[ -z "$server_ip" ] && server_ip="$(wget -qO- -t1 -T2 api.ip.sb/ip)"
     [ -z "$server_ip" ] && echo "无法获取本机IP，请手动输入" && exit 1
 }
 
@@ -1519,7 +1519,7 @@ OtherFunctions(){
 UpdateScript(){
 	sh_new_ver=$(wget --no-check-certificate -qO- -t1 -T3 "https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrmu.sh"|grep 'sh_ver="'|awk -F "=" '{print $NF}'|sed 's/\"//g'|head -1)
 	[ -z "$sh_new_ver" ] && echo -e "$error 无法链接到 Github !" && exit 1
-	wget --no-check-certificate https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrmu.init -qO /etc/init.d/ssrmu
+	wget --no-check-certificate "https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrmu.init" -qO /etc/init.d/ssrmu
 	wget --no-check-certificate "https://raw.githubusercontent.com/woniuzfb/doubi/master/ssrmu.sh" -qO "$SH_FILE" && chmod +x "$SH_FILE"
 	echo -e "脚本已更新为最新版本[ $sh_new_ver ] !(输入: ssr 使用)" && exit 0
 }
