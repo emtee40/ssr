@@ -658,6 +658,7 @@ ListAccs(){
         acc_transfer_used=$((accs_d[index]+accs_u[index]))
         acc_transfer_used_text=$(numfmt --to=iec --suffix=B "$acc_transfer_used")
         acc_transfer_left=$((accs_transfer_enable[index]-acc_transfer_used))
+        [[ acc_transfer_left -lt 0 ]] && acc_transfer_left=0
         acc_transfer_left_text=$(numfmt --to=iec --suffix=B "$acc_transfer_left")
         accs_transfer_used=$((acc_transfer_used+accs_transfer_used))
         acc_transfer_enable_text=$(numfmt --to=iec --suffix=B "${accs_transfer_enable[index]}")
@@ -702,6 +703,7 @@ GetAccInfo(){
     fi
     [ "$acc_forbidden_port" == "" ] && acc_forbidden_port_text="无" || acc_forbidden_port_text="$acc_forbidden_port"
     acc_transfer_used_text=$(numfmt --to=iec --suffix=B "$acc_transfer_used")
+    [[ acc_transfer_left -lt 0 ]] && acc_transfer_left=0
     acc_transfer_left_text=$(numfmt --to=iec --suffix=B "$acc_transfer_left")
     acc_transfer_enable_text=$(numfmt --to=iec --suffix=B "$acc_transfer_enable")
 }
