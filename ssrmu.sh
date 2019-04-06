@@ -687,6 +687,7 @@ GetAccInfo(){
     acc_transfer_left=$((acc_transfer_enable-acc_transfer_used))
     acc_d_text=$(numfmt --to=iec --suffix=B "$acc_d")
     acc_u_text=$(numfmt --to=iec --suffix=B "$acc_u")
+    [ "$acc_protocol_param" == "" ] && acc_protocol_param_text="无限" || acc_protocol_param_text="$acc_protocol_param"
     acc_speed_con_byte=$(numfmt --from=iec "$acc_speed_con"K)
     if [ "$acc_speed_con" == "0" ]; then
         acc_speed_con_text="无限"
@@ -699,7 +700,7 @@ GetAccInfo(){
     else
         acc_speed_user_text=$(numfmt --to=iec --suffix=B "$acc_speed_user_byte")"/s"
     fi
-    acc_forbidden_port_text=$acc_forbidden_port
+    [ "$acc_forbidden_port" == "" ] && acc_forbidden_port_text="无" || acc_forbidden_port_text="$acc_forbidden_port"
     acc_transfer_used_text=$(numfmt --to=iec --suffix=B "$acc_transfer_used")
     acc_transfer_left_text=$(numfmt --to=iec --suffix=B "$acc_transfer_left")
     acc_transfer_enable_text=$(numfmt --to=iec --suffix=B "$acc_transfer_enable")
@@ -715,7 +716,7 @@ ViewAccInfo(){
     echo -e " 协议\t    : $red$acc_protocol$plain"
     echo -e " 混淆\t    : $red$acc_obfs$plain"
     echo -e " 混淆的参数 : $green$acc_obfs_param$plain"
-    echo -e " 设备数限制 : $green$acc_protocol_param$plain"
+    echo -e " 设备数限制 : $green$acc_protocol_param_text$plain"
     echo -e " 单线程限速 : $green$acc_speed_con_text$plain"
     echo -e " 用户总限速 : $green$acc_speed_user_text$plain"
     echo -e " 禁止的端口 : $green$acc_forbidden_port_text$plain"
