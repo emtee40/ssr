@@ -13,7 +13,6 @@ export PATH
 #=================================================
 
 sh_ver="1.0.29"
-jq_ver="1.6"
 libso_ver_default="1.0.17"
 SH_FILE="/usr/local/bin/ssr"
 SSR_PATH="/usr/local/shadowsocksr"
@@ -29,7 +28,6 @@ LOTSERVER_FILE="/appex/bin/serverSpeeder.sh"
 
 green="\033[32m"
 red="\033[31m"
-green_background="\033[42;37m"
 red_background="\033[41;37m"
 plain="\033[0m"
 info="${green}[信息]$plain"
@@ -70,6 +68,7 @@ CheckRelease()
         release_bit="32"
     fi
 
+    update_once=0
     depends=(wget unzip vim curl cron crond python)
     for depend in "${depends[@]}"; do
         DEPEND_PATH="$(command -v "$depend" || true)"
@@ -77,6 +76,10 @@ CheckRelease()
             case "$release" in
                 "rpm")
                     if [ "$depend" != "cron" ]; then
+                        if [ $update_once == 0 ];then
+                            yum -y update >/dev/null 2>&1
+                            update_once=1
+                        fi
                         if yum -y install "$depend" >/dev/null 2>&1; then
                             echo -e "$info 依赖 $depend 安装成功..."
                         else
@@ -86,6 +89,10 @@ CheckRelease()
                 ;;
                 "deb"|"ubu")
                     if [ "$depend" != "crond" ]; then
+                        if [ $update_once == 0 ];then
+                            apt-get -y update >/dev/null 2>&1
+                            update_once=1
+                        fi
                         if apt-get -y install "$depend" >/dev/null 2>&1; then
                             echo -e "$info 依赖 $depend 安装成功..."
                         else
@@ -615,7 +622,7 @@ DelIptables(){
         else
             iptables-save > /etc/iptables.up.rules
             ip6tables-save > /etc/ip6tables.up.rules
-            #rm /etc/network/if-pre-up.d/iptables
+            rm /etc/network/if-pre-up.d/iptables
         fi
     fi
 }
