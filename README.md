@@ -1,4 +1,4 @@
-# 自用ShadowsockR一键管理脚本，使用方法：<kbd>Enter</kbd>
+# 自用ShadowsocksR一键管理脚本，使用方法：<kbd>Enter</kbd>
 
 ---
 
