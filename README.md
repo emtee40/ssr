@@ -9,7 +9,7 @@
 - 扩展 ...
 
 ``` bash
-wget -N --no-check-certificate https://raw.githubusercontent.com/woniuzfb/ssr/master/ssrmu.sh && bash ssrmu.sh
+bash -c "$(wget --no-check-certificate -qO- https://raw.githubusercontent.com/woniuzfb/ssr/master/ssrmu.sh)"
 ```
 
 ---
