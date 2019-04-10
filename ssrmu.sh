@@ -315,7 +315,7 @@ SetAccPort(){
     echo && echo $separator && echo -e "	端口: $green $acc_port $plain" && echo $separator && echo
 }
 
-RandPasswd(){
+RandPasswd(){#date +%s | sha256sum | base64 | head -c 10
     pass_size=10
     pass_array=(
         q w e r t y u i o p a s d f g h j k l z x c v b n m Q W E R T Y U I O P A S D
@@ -1181,7 +1181,7 @@ ConfigAccAll(){
 }
 
 ConfigServerName(){
-    server_pub_addr=$(< $USER_API_CONFIG_FILE grep "SERVER_PUB_ADDR = "|awk -F "[']" '{print $2}')
+    server_pub_addr=$(< "$USER_API_CONFIG_FILE" grep "SERVER_PUB_ADDR = "|awk -F "[']" '{print $2}')
     if [ -z "$server_pub_addr" ]; then
         echo -e "$error 获取当前配置的 服务器IP或域名失败！" && exit 1
     else
