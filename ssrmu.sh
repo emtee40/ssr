@@ -1044,16 +1044,41 @@ ConfigAccForbid(){
 }
 
 ConfigAccUser(){
-    $JQ_FILE '(.[]|select(.port=='"$acc_port"')|.user)='"$acc_user"'' "$MUDB_FILE" > mudb.tmp
-    mv mudb.tmp "$MUDB_FILE"
-    echo && echo $separator && echo -e "修改用户名成功！新用户名: $green $acc_user $plain" && echo $separator && echo
-    RestartSsr
+    echo "请输入要设置的用户新的用户名(输入0 保持不变)"
+    while read -p "(默认: 随机):" acc_user; do
+        acc_user=${acc_user// /}
+        if [ -z "$acc_user" ]; then
+            RandAccUser
+            break
+        elif [ "$acc_user" == 0 ]; then
+            break
+        else
+            acc_info=$($JQ_FILE '.[]|select(.user=="'"$acc_user"'")' $MUDB_FILE)
+            if [ -z "$acc_info" ]; then
+                break
+            else
+                echo -e "$error 用户名已存在！请重新输入！ "
+            fi
+        fi
+    done
+    if [ "$acc_user" == 0 ]; then
+        acc_user=$($JQ_FILE '.[]|select(.port=='"$acc_port"')|.user' "$MUDB_FILE")
+        echo && echo $separator && echo -e "用户名保持不变！用户名: $green $acc_user $plain" && echo $separator && echo
+    else
+        echo && echo "$separator" && echo -e "	用户名 : $green$acc_user$plain" && echo "$separator" && echo
+
+        $JQ_FILE '(.[]|select(.port=='"$acc_port"')|.user)="'"$acc_user"'"' "$MUDB_FILE" > mudb.tmp
+        mv mudb.tmp "$MUDB_FILE"
+        echo && echo $separator && echo -e "修改用户名成功！新用户名: $green $acc_user $plain" && echo $separator && echo
+    fi
 }
 
 ConfigAccPort(){
-    echo "请输入要设置的用户 端口(请勿重复, 用于区分)"
+    echo "请输入要设置的用户新的端口(输入0 保持不变)"
     while read -p "(默认: 随机生成):" acc_port_new; do
         case "$acc_port_new" in
+            (0)
+                break
             ("")
                 GetFreePort
                 break
@@ -1079,10 +1104,13 @@ ConfigAccPort(){
             ;;
         esac
     done
-    $JQ_FILE '(.[]|select(.port=='"$acc_port"')|.port)='"$acc_port_new"'' "$MUDB_FILE" > mudb.tmp
-    mv mudb.tmp "$MUDB_FILE"
-    echo && echo $separator && echo -e "修改端口成功！新端口: $green $acc_port_new $plain" && echo $separator && echo
-    RestartSsr
+    if [ "$acc_port_new" -gt 0 ]; then
+        $JQ_FILE '(.[]|select(.port=='"$acc_port"')|.port)='"$acc_port_new"'' "$MUDB_FILE" > mudb.tmp
+        mv mudb.tmp "$MUDB_FILE"
+        echo && echo $separator && echo -e "修改端口成功！新端口: $green $acc_port_new $plain" && echo $separator && echo
+    else
+        echo && echo $separator && echo -e "端口保持不变！端口: $green $acc_port $plain" && echo $separator && echo
+    fi
 }
 
 ConfigAccStatus(){
@@ -1164,8 +1192,8 @@ ConfigAccAll(){
     SetAccSpeedUser
     SetAccTransfer
     SetAccForbid
-    SetAccUser
-    SetAccPort
+    ConfigAccUser
+    ConfigAccPort
     ConfigAccPasswd
     ConfigAccMethod
     ConfigAccProtocol
@@ -1176,8 +1204,6 @@ ConfigAccAll(){
     ConfigAccSpeedUser
     ConfigAccTransfer
     ConfigAccForbid
-    ConfigAccUser
-    ConfigAccPort
 }
 
 ConfigServerName(){
@@ -1245,11 +1271,11 @@ ConfigAccMenu(){
         ;;
         13) ReadAccPort && SetAccForbid && ConfigAccForbid
         ;;
-        14) ReadAccPort && SetAccUser && ConfigAccUser
+        14) ReadAccPort && ConfigAccUser && RestartSsr
         ;;
-        15) ReadAccPort && ConfigAccPort
+        15) ReadAccPort && ConfigAccPort && RestartSsr
         ;;
-        16) ReadAccPort && ConfigAccAll
+        16) ReadAccPort && ConfigAccAll && RestartSsr
         ;;
         17) ReadAccPort && SetServerName && ConfigServerName
         ;;
@@ -1261,7 +1287,7 @@ ConfigAccDiy(){
     echo "是否现在重启ShadowsocksR？[Y/n]" && echo
     read -p "(默认: y):" acc_diy_yn
     [ -z "$acc_diy_yn" ] && acc_diy_yn="y"
-    [[ "$acc_diy_yn" == [Yy] ]] && RestartSsr
+    [[ "$acc_diy_yn" == [Yy] ]]
 }
 
 ClearTransferSetCron(){
@@ -1559,7 +1585,6 @@ ConfigVerboseLog(){
     fi
     $JQ_FILE '.connect_verbose_info='"$connect_verbose_info"'' $USER_CONFIG_FILE > config.tmp
     mv config.tmp $USER_CONFIG_FILE
-    RestartSsr
 }
 
 ViewLog(){
@@ -1595,7 +1620,7 @@ OtherFunctions(){
         ;;
         5) UnBanBtPtSpam
         ;;
-        6) ConfigVerboseLog
+        6) ConfigVerboseLog && RestartSsr
         ;;
         *) echo -e "$error 请输入正确的数字 [1-6]" && exit 1
         ;;
@@ -1662,7 +1687,7 @@ Menu(){
         ;;
         6) ConfigAccMenu
         ;;
-        7) ConfigAccDiy
+        7) ConfigAccDiy && RestartSsr
         ;;
         8) ClearTransferMenu
         ;;
