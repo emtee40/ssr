@@ -315,7 +315,8 @@ SetAccPort(){
     echo && echo $separator && echo -e "	端口: $green $acc_port $plain" && echo $separator && echo
 }
 
-RandPasswd(){#date +%s | sha256sum | base64 | head -c 10
+RandPasswd(){
+    #date +%s | sha256sum | base64 | head -c 10
     pass_size=10
     pass_array=(
         q w e r t y u i o p a s d f g h j k l z x c v b n m Q W E R T Y U I O P A S D
