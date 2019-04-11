@@ -1064,7 +1064,7 @@ ConfigAccUser(){
     done
     if [ "$acc_user" == 0 ]; then
         acc_user=$($JQ_FILE '.[]|select(.port=='"$acc_port"')|.user' "$MUDB_FILE")
-        acc_user=${acc_user//\'/}
+        acc_user=${acc_user//\"/}
         echo && echo $separator && echo -e "用户名保持不变！用户名: $green $acc_user $plain" && echo $separator && echo
     else
         echo && echo "$separator" && echo -e "	用户名 : $green$acc_user$plain" && echo "$separator" && echo
